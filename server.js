@@ -579,6 +579,49 @@ app.put('/api/bookings/:id/status', async (req, res) => {
   }
 });
 
+
+// ── 예약링크 토큰 생성 (URL 단축용) ───────────────────────────────────────
+// 견적 데이터를 서버에 저장 → 짧은 토큰 반환 → booking.html?t={token}
+app.post('/api/booking/token', async (req, res) => {
+  const { name, phone, size, type, price, companyName } = req.body;
+  try {
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(6).toString('hex'); // 12자리 짧은 토큰
+
+    const { error } = await supabase.from('booking_tokens').insert([{
+      token,
+      quote_data: { name, phone, size, type, price, companyName },
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7일 유효
+    }]);
+    if (error) throw error;
+
+    const bookingUrl = `https://momomint10.github.io/ssak-app/booking.html?t=${token}`;
+    res.json({ success: true, url: bookingUrl, token });
+  } catch (err) {
+    console.error('토큰 생성 오류:', err);
+    res.status(500).json({ error: '서버 오류: ' + err.message });
+  }
+});
+
+// ── 예약링크 토큰 조회 ──────────────────────────────────────────────────────
+app.get('/api/booking/token/:token', async (req, res) => {
+  const { token } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('booking_tokens')
+      .select('*')
+      .eq('token', token)
+      .single();
+
+    if (error || !data) return res.status(404).json({ error: '유효하지 않은 링크입니다' });
+    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: '만료된 링크입니다 (7일 초과)' });
+
+    res.json({ success: true, data: data.quote_data });
+  } catch (err) {
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
 // 서버 시작
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
