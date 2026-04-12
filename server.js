@@ -358,6 +358,104 @@ app.post('/api/contract/upload', async (req, res) => {
   }
 });
 
+// ── 비대면 계약서: 저장 & 서명링크 발송 ──────────────
+app.post('/api/contract/create', async (req, res) => {
+  const { contractData, ownerSignature, ownerPhone, customerPhone, customerName, companyName, companyPhone } = req.body;
+  if (!contractData || !customerPhone) {
+    return res.status(400).json({ error: '필수 데이터가 없습니다' });
+  }
+  try {
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(20).toString('hex');
+
+    const { error } = await supabase.from('pending_contracts').insert([{
+      token,
+      contract_data: contractData,
+      owner_signature: ownerSignature || null,
+      status: 'pending'
+    }]);
+    if (error) throw error;
+
+    const signUrl = `https://momomint10.github.io/ssak-app/sign.html?token=${token}`;
+    const msg = `[${companyName||'서프로클린'}] 계약서 서명 요청\n\n${customerName||'고객'}님, 아래 링크에서 계약서 내용을 확인하고 서명해 주세요.\n\n${signUrl}\n\n링크는 7일간 유효합니다.\n\n문의: ${companyPhone||''}`;
+
+    await sendSMSUtil(customerPhone.replace(/-/g,''), msg);
+
+    console.log(`계약서 생성: ${token}`);
+    res.json({ success: true, token, signUrl });
+  } catch (err) {
+    console.error('계약서 생성 오류:', err);
+    res.status(500).json({ error: '서버 오류: ' + err.message });
+  }
+});
+
+// ── 비대면 계약서: 고객 조회 ─────────────────────────
+app.get('/api/contract/:token', async (req, res) => {
+  const { token } = req.params;
+  try {
+    const { data, error } = await supabase.from('pending_contracts').select('*').eq('token', token).single();
+    if (error || !data) return res.status(404).json({ error: '계약서를 찾을 수 없습니다' });
+    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: '만료된 계약서입니다' });
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
+// ── 비대면 계약서: 고객 서명 완료 & PDF 생성 ────────────
+app.post('/api/contract/:token/sign', async (req, res) => {
+  const { token } = req.params;
+  const { customerSignature, pdfBase64 } = req.body;
+  if (!customerSignature) return res.status(400).json({ error: '서명이 없습니다' });
+
+  try {
+    const { data: contract, error } = await supabase.from('pending_contracts').select('*').eq('token', token).single();
+    if (error || !contract) return res.status(404).json({ error: '계약서를 찾을 수 없습니다' });
+    if (contract.status === 'completed') return res.status(400).json({ error: '이미 서명된 계약서입니다' });
+
+    const cd = contract.contract_data;
+    let pdfUrl = null;
+
+    // PDF 업로드
+    if (pdfBase64) {
+      const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+      const fileName = `${Date.now()}_${token.slice(0,8)}.pdf`;
+      const filePath = `contracts/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from('ssak-contracts').upload(filePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('ssak-contracts').getPublicUrl(filePath);
+        pdfUrl = urlData.publicUrl;
+      }
+    }
+
+    // 상태 업데이트
+    await supabase.from('pending_contracts').update({
+      customer_signature: customerSignature,
+      status: 'completed',
+      pdf_url: pdfUrl
+    }).eq('token', token);
+
+    // 양측 SMS 발송
+    const companyName = cd.companyName || '서프로클린';
+    const companyPhone = cd.companyPhone || '';
+    const customerName = cd.name || '고객';
+    const customerPhone = cd.phone || '';
+    const linkMsg = pdfUrl ? `\n\n계약서 PDF: ${pdfUrl}` : '';
+
+    const customerMsg = `[${companyName}] 계약서 서명 완료!\n${customerName}님의 서명이 완료되었습니다.${linkMsg}\n\n문의: ${companyPhone}`;
+    const ownerMsg = `[계약서 서명 완료]\n고객: ${customerName}님 (${customerPhone})\n서명이 완료되었습니다.${linkMsg}`;
+
+    if (customerPhone) await sendSMSUtil(customerPhone.replace(/-/g,''), customerMsg);
+    if (companyPhone) await sendSMSUtil(companyPhone.replace(/-/g,''), ownerMsg);
+
+    console.log(`계약서 서명 완료: ${token}`);
+    res.json({ success: true, pdfUrl });
+  } catch (err) {
+    console.error('서명 완료 오류:', err);
+    res.status(500).json({ error: '서버 오류: ' + err.message });
+  }
+});
+
 // 서버 시작
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
