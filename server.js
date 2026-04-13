@@ -382,7 +382,7 @@ app.post('/api/contract/create', async (req, res) => {
     }]);
     if (error) throw error;
  
-    const signUrl = `https://sskapp.co.kr/sign.html?token=${token}`;
+    const signUrl = `https://ssakapp.co.kr/sign.html?token=${token}`;
     const msg = `[${companyName||'서프로클린'}] 계약서 서명 요청\n\n${customerName||'고객'}님, 아래 링크에서 계약서 내용을 확인하고 서명해 주세요.\n\n${signUrl}\n\n링크는 7일간 유효합니다.\n\n문의: ${companyPhone||''}`;
  
     await sendSMSUtil(customerPhone.replace(/-/g,''), msg, `[${companyName||'서프로클린'}] 계약서`);
@@ -595,7 +595,7 @@ app.post('/api/booking/token', async (req, res) => {
     }]);
     if (error) throw error;
  
-    const finalUrl = `https://sskapp.co.kr/booking.html?t=${token}`;
+    const finalUrl = `https://ssakapp.co.kr/booking.html?t=${token}`;
     res.json({ success: true, url: finalUrl, token });
   } catch (err) {
     console.error('토큰 생성 오류:', err);
