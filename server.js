@@ -7,32 +7,32 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ limit: '20mb', extended: true }));
  
-// Supabase ì°ê²°
+// Supabase Ã¬ÂÂ°ÃªÂ²Â°
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
  
-// ââ ìë² ìí íì¸ ââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã¬ÂÂÃ«Â²Â Ã¬ÂÂÃ­ÂÂ Ã­ÂÂÃ¬ÂÂ¸ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
-    message: 'ì¹ì¹ ìë² ì ì ìë ì¤ ð§¹',
+    message: 'Ã¬ÂÂ¹Ã¬ÂÂ¹ Ã¬ÂÂÃ«Â²Â Ã¬Â ÂÃ¬ÂÂ Ã¬ÂÂÃ«ÂÂ Ã¬Â¤Â Ã°ÂÂ§Â¹',
     version: '1.0.0'
   });
 });
  
-// ââ êµ¬ëì ì¬ì  ì ì²­ ââââââââââââââââââââââââââââ
-// ëë©íì´ì§ìì ì¬ì  ì ì²­ ì í¸ì¶
+// Ã¢ÂÂÃ¢ÂÂ ÃªÂµÂ¬Ã«ÂÂÃ¬ÂÂ Ã¬ÂÂ¬Ã¬Â Â Ã¬ÂÂ Ã¬Â²Â­ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// Ã«ÂÂÃ«ÂÂ©Ã­ÂÂÃ¬ÂÂ´Ã¬Â§ÂÃ¬ÂÂÃ¬ÂÂ Ã¬ÂÂ¬Ã¬Â Â Ã¬ÂÂ Ã¬Â²Â­ Ã¬ÂÂ Ã­ÂÂ¸Ã¬Â¶Â
 app.post('/api/subscribe', async (req, res) => {
   const { company_name, phone, email, plan } = req.body;
  
   if (!company_name || !phone) {
-    return res.status(400).json({ error: 'ìì²´ëªê³¼ ì°ë½ì²ë íììëë¤' });
+    return res.status(400).json({ error: 'Ã¬ÂÂÃ¬Â²Â´Ã«ÂªÂÃªÂ³Â¼ Ã¬ÂÂ°Ã«ÂÂ½Ã¬Â²ÂÃ«ÂÂ Ã­ÂÂÃ¬ÂÂÃ¬ÂÂÃ«ÂÂÃ«ÂÂ¤' });
   }
  
   try {
-    // ì¤ë³µ ì²´í¬
+    // Ã¬Â¤ÂÃ«Â³Âµ Ã¬Â²Â´Ã­ÂÂ¬
     const { data: existing } = await supabase
       .from('subscribers')
       .select('id')
@@ -40,10 +40,10 @@ app.post('/api/subscribe', async (req, res) => {
       .single();
  
     if (existing) {
-      return res.json({ success: true, message: 'ì´ë¯¸ ì ì²­íì¨ìµëë¤!', duplicate: true });
+      return res.json({ success: true, message: 'Ã¬ÂÂ´Ã«Â¯Â¸ Ã¬ÂÂ Ã¬Â²Â­Ã­ÂÂÃ¬ÂÂ¨Ã¬ÂÂµÃ«ÂÂÃ«ÂÂ¤!', duplicate: true });
     }
  
-    // êµ¬ëì ì ì¥
+    // ÃªÂµÂ¬Ã«ÂÂÃ¬ÂÂ Ã¬Â ÂÃ¬ÂÂ¥
     const { data: subscriber, error } = await supabase
       .from('subscribers')
       .insert([{
@@ -58,33 +58,33 @@ app.post('/api/subscribe', async (req, res) => {
  
     if (error) throw error;
  
-    // ê¸°ë³¸ ìì²´ ì¤ì  ìë ìì±
+    // ÃªÂ¸Â°Ã«Â³Â¸ Ã¬ÂÂÃ¬Â²Â´ Ã¬ÂÂ¤Ã¬Â Â Ã¬ÂÂÃ«ÂÂ Ã¬ÂÂÃ¬ÂÂ±
     await supabase
       .from('business_settings')
       .insert([{
         subscriber_id: subscriber.id,
         company_name,
         phone,
-        greeting: `ìëíì¸ì! ð ${company_name} ìì£¼ì²­ì ì ë¬¸íìëë¤.`,
+        greeting: `Ã¬ÂÂÃ«ÂÂÃ­ÂÂÃ¬ÂÂ¸Ã¬ÂÂ! Ã°ÂÂÂ ${company_name} Ã¬ÂÂÃ¬Â£Â¼Ã¬Â²Â­Ã¬ÂÂ Ã¬Â ÂÃ«Â¬Â¸Ã­ÂÂÃ¬ÂÂÃ«ÂÂÃ«ÂÂ¤.`,
       }]);
  
     res.json({
       success: true,
-      message: 'ì ì²­ì´ ìë£ëììµëë¤! ì¶ì ì ì°ë½ëë¦´ê²ì ð',
+      message: 'Ã¬ÂÂ Ã¬Â²Â­Ã¬ÂÂ´ Ã¬ÂÂÃ«Â£ÂÃ«ÂÂÃ¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤! Ã¬Â¶ÂÃ¬ÂÂ Ã¬ÂÂ Ã¬ÂÂ°Ã«ÂÂ½Ã«ÂÂÃ«Â¦Â´ÃªÂ²ÂÃ¬ÂÂ Ã°ÂÂÂ',
       id: subscriber.id
     });
  
   } catch (err) {
-    console.error('êµ¬ë ì ì²­ ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥ê° ë°ìíìµëë¤' });
+    console.error('ÃªÂµÂ¬Ã«ÂÂ Ã¬ÂÂ Ã¬Â²Â­ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥ÂÃªÂ°Â Ã«Â°ÂÃ¬ÂÂÃ­ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤' });
   }
 });
  
-// ââ êµ¬ëì ëª©ë¡ ì¡°í (ê´ë¦¬ìì©) âââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ ÃªÂµÂ¬Ã«ÂÂÃ¬ÂÂ Ã«ÂªÂ©Ã«Â¡Â Ã¬Â¡Â°Ã­ÂÂ (ÃªÂ´ÂÃ«Â¦Â¬Ã¬ÂÂÃ¬ÂÂ©) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.get('/api/subscribers', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
+    return res.status(401).json({ error: 'Ã¬ÂÂ¸Ã¬Â¦Â Ã¬ÂÂ¤Ã­ÂÂ¨' });
   }
  
   try {
@@ -97,16 +97,16 @@ app.get('/api/subscribers', async (req, res) => {
     res.json({ success: true, count: data.length, data });
  
   } catch (err) {
-    console.error('êµ¬ëì ì¡°í ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    console.error('ÃªÂµÂ¬Ã«ÂÂÃ¬ÂÂ Ã¬Â¡Â°Ã­ÂÂ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ââ êµ¬ëì ìí ë³ê²½ (ê´ë¦¬ìì©) âââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ ÃªÂµÂ¬Ã«ÂÂÃ¬ÂÂ Ã¬ÂÂÃ­ÂÂ Ã«Â³ÂÃªÂ²Â½ (ÃªÂ´ÂÃ«Â¦Â¬Ã¬ÂÂÃ¬ÂÂ©) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.put('/api/subscribers/:id/status', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
+    return res.status(401).json({ error: 'Ã¬ÂÂ¸Ã¬Â¦Â Ã¬ÂÂ¤Ã­ÂÂ¨' });
   }
  
   const { id } = req.params;
@@ -114,7 +114,7 @@ app.put('/api/subscribers/:id/status', async (req, res) => {
  
   const validStatuses = ['pending', 'active', 'paused', 'cancelled'];
   if (!validStatuses.includes(status)) {
-    return res.status(400).json({ error: 'ì í¨íì§ ìì ìíê°ìëë¤' });
+    return res.status(400).json({ error: 'Ã¬ÂÂ Ã­ÂÂ¨Ã­ÂÂÃ¬Â§Â Ã¬ÂÂÃ¬ÂÂ Ã¬ÂÂÃ­ÂÂÃªÂ°ÂÃ¬ÂÂÃ«ÂÂÃ«ÂÂ¤' });
   }
  
   try {
@@ -129,12 +129,12 @@ app.put('/api/subscribers/:id/status', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    console.error('ìí ë³ê²½ ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    console.error('Ã¬ÂÂÃ­ÂÂ Ã«Â³ÂÃªÂ²Â½ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ââ ìì²´ ì¤ì  ì¡°í âââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã¬ÂÂÃ¬Â²Â´ Ã¬ÂÂ¤Ã¬Â Â Ã¬Â¡Â°Ã­ÂÂ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.get('/api/settings/:id', async (req, res) => {
   const { id } = req.params;
  
@@ -149,12 +149,12 @@ app.get('/api/settings/:id', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    console.error('ì¤ì  ì¡°í ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    console.error('Ã¬ÂÂ¤Ã¬Â Â Ã¬Â¡Â°Ã­ÂÂ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ââ ìì²´ ì¤ì  ìë°ì´í¸ âââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã¬ÂÂÃ¬Â²Â´ Ã¬ÂÂ¤Ã¬Â Â Ã¬ÂÂÃ«ÂÂ°Ã¬ÂÂ´Ã­ÂÂ¸ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.put('/api/settings/:id', async (req, res) => {
   const { id } = req.params;
   const settings = req.body;
@@ -171,12 +171,12 @@ app.put('/api/settings/:id', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    console.error('ì¤ì  ìë°ì´í¸ ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    console.error('Ã¬ÂÂ¤Ã¬Â Â Ã¬ÂÂÃ«ÂÂ°Ã¬ÂÂ´Ã­ÂÂ¸ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ââ ì¸ë ¥ í ëª©ë¡ ì¡°í âââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã¬ÂÂ¸Ã«Â Â¥ Ã­ÂÂ Ã«ÂªÂ©Ã«Â¡Â Ã¬Â¡Â°Ã­ÂÂ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.get('/api/workforce', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -189,16 +189,16 @@ app.get('/api/workforce', async (req, res) => {
     res.json({ success: true, count: data.length, data });
  
   } catch (err) {
-    console.error('ì¸ë ¥ í ì¡°í ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    console.error('Ã¬ÂÂ¸Ã«Â Â¥ Ã­ÂÂ Ã¬Â¡Â°Ã­ÂÂ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ââ íµê³ (ê´ë¦¬ìì©) ââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã­ÂÂµÃªÂ³Â (ÃªÂ´ÂÃ«Â¦Â¬Ã¬ÂÂÃ¬ÂÂ©) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.get('/api/stats', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
+    return res.status(401).json({ error: 'Ã¬ÂÂ¸Ã¬Â¦Â Ã¬ÂÂ¤Ã­ÂÂ¨' });
   }
  
   try {
@@ -218,25 +218,25 @@ app.get('/api/stats', async (req, res) => {
     res.json({ success: true, stats });
  
   } catch (err) {
-    console.error('íµê³ ì¡°í ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    console.error('Ã­ÂÂµÃªÂ³Â Ã¬Â¡Â°Ã­ÂÂ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ââ SMS ë°ì¡ (CoolSMS) ââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ SMS Ã«Â°ÂÃ¬ÂÂ¡ (CoolSMS) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.post('/api/sms/send', async (req, res) => {
   const { to, msg, subject } = req.body;
  
-  // íê²½ë³ììì API í¤ ë¡ë (ì¬ì©ììê² ë¸ì¶ ì ë¨)
+  // Ã­ÂÂÃªÂ²Â½Ã«Â³ÂÃ¬ÂÂÃ¬ÂÂÃ¬ÂÂ API Ã­ÂÂ¤ Ã«Â¡ÂÃ«ÂÂ (Ã¬ÂÂ¬Ã¬ÂÂ©Ã¬ÂÂÃ¬ÂÂÃªÂ²Â Ã«ÂÂ¸Ã¬Â¶Â Ã¬ÂÂ Ã«ÂÂ¨)
   const apiKey = process.env.COOLSMS_API_KEY;
   const apiSecret = process.env.COOLSMS_API_SECRET;
   const from = process.env.COOLSMS_FROM;
  
   if (!apiKey || !apiSecret || !from) {
-    return res.status(500).json({ error: 'SMS APIê° ì¤ì ëì§ ìììµëë¤.' });
+    return res.status(500).json({ error: 'SMS APIÃªÂ°Â Ã¬ÂÂ¤Ã¬Â ÂÃ«ÂÂÃ¬Â§Â Ã¬ÂÂÃ¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤.' });
   }
   if (!to || !msg) {
-    return res.status(400).json({ error: 'ìì ë²í¸ì ë©ìì§ë íììëë¤' });
+    return res.status(400).json({ error: 'Ã¬ÂÂÃ¬ÂÂ Ã«Â²ÂÃ­ÂÂ¸Ã¬ÂÂ Ã«Â©ÂÃ¬ÂÂÃ¬Â§ÂÃ«ÂÂ Ã­ÂÂÃ¬ÂÂÃ¬ÂÂÃ«ÂÂÃ«ÂÂ¤' });
   }
  
   try {
@@ -262,9 +262,9 @@ app.post('/api/sms/send', async (req, res) => {
           from: from.replace(/-/g, ''),
           text: msg,
           type: msgType,
-          // LMS: ì ë¬ë°ì subject ì¬ì© (ìì¼ë©´ ê³µë°± ëì  ê¸°ë³¸ê°)
-          // subjectê° ëªìì ì¼ë¡ ì¤ì ëë©´ CoolSMSê° ì²« ì¤ ìëì¶ì¶ ì í¨
-          ...(msgType === 'LMS' ? { subject: (subject && subject.trim()) ? subject.trim().slice(0,20) : '[ìíë¡í´ë¦°] ë¬¸ì' } : {})
+          // LMS: Ã¬Â ÂÃ«ÂÂ¬Ã«Â°ÂÃ¬ÂÂ subject Ã¬ÂÂ¬Ã¬ÂÂ© (Ã¬ÂÂÃ¬ÂÂ¼Ã«Â©Â´ ÃªÂ³ÂµÃ«Â°Â± Ã«ÂÂÃ¬ÂÂ  ÃªÂ¸Â°Ã«Â³Â¸ÃªÂ°Â)
+          // subjectÃªÂ°Â Ã«ÂªÂÃ¬ÂÂÃ¬Â ÂÃ¬ÂÂ¼Ã«Â¡Â Ã¬ÂÂ¤Ã¬Â ÂÃ«ÂÂÃ«Â©Â´ CoolSMSÃªÂ°Â Ã¬Â²Â« Ã¬Â¤Â Ã¬ÂÂÃ«ÂÂÃ¬Â¶ÂÃ¬Â¶Â Ã¬ÂÂ Ã­ÂÂ¨
+          ...(msgType === 'LMS' ? { subject: (subject && subject.trim()) ? subject.trim().slice(0,20) : '[Ã¬ÂÂÃ­ÂÂÃ«Â¡ÂÃ­ÂÂ´Ã«Â¦Â°] Ã«Â¬Â¸Ã¬ÂÂ' } : {})
         }
       })
     });
@@ -272,26 +272,26 @@ app.post('/api/sms/send', async (req, res) => {
     const data = await response.json();
  
     if (response.ok) {
-      console.log(`SMS ë°ì¡ ìë£: ${to} (${msgType})`);
-      res.json({ success: true, message: 'ë°ì¡ ìë£', type: msgType });
+      console.log(`SMS Ã«Â°ÂÃ¬ÂÂ¡ Ã¬ÂÂÃ«Â£Â: ${to} (${msgType})`);
+      res.json({ success: true, message: 'Ã«Â°ÂÃ¬ÂÂ¡ Ã¬ÂÂÃ«Â£Â', type: msgType });
     } else {
-      console.error('SMS ë°ì¡ ì¤í¨:', data);
-      res.status(400).json({ error: data.errorMessage || 'ë°ì¡ ì¤í¨' });
+      console.error('SMS Ã«Â°ÂÃ¬ÂÂ¡ Ã¬ÂÂ¤Ã­ÂÂ¨:', data);
+      res.status(400).json({ error: data.errorMessage || 'Ã«Â°ÂÃ¬ÂÂ¡ Ã¬ÂÂ¤Ã­ÂÂ¨' });
     }
  
   } catch (err) {
-    console.error('SMS ë°ì¡ ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥ê° ë°ìíìµëë¤' });
+    console.error('SMS Ã«Â°ÂÃ¬ÂÂ¡ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥ÂÃªÂ°Â Ã«Â°ÂÃ¬ÂÂÃ­ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤' });
   }
 });
  
-// ââ SMS ë°ì¡ ê³µíµ í¨ì âââââââââââââââââââââââââââ
-// subject ë¯¸ì¤ì  ì CoolSMSê° ë³¸ë¬¸ ì²« ì¤ì ìë ì¶ì¶ â [Webë°ì ] ìë¤ ì¤ë³µ ìì¸
+// Ã¢ÂÂÃ¢ÂÂ SMS Ã«Â°ÂÃ¬ÂÂ¡ ÃªÂ³ÂµÃ­ÂÂµ Ã­ÂÂ¨Ã¬ÂÂ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// subject Ã«Â¯Â¸Ã¬ÂÂ¤Ã¬Â Â Ã¬ÂÂ CoolSMSÃªÂ°Â Ã«Â³Â¸Ã«Â¬Â¸ Ã¬Â²Â« Ã¬Â¤ÂÃ¬ÂÂ Ã¬ÂÂÃ«ÂÂ Ã¬Â¶ÂÃ¬Â¶Â Ã¢ÂÂ [WebÃ«Â°ÂÃ¬ÂÂ ] Ã¬ÂÂÃ«ÂÂ¤ Ã¬Â¤ÂÃ«Â³Âµ Ã¬ÂÂÃ¬ÂÂ¸
 async function sendSMSUtil(to, msg, subject) {
   const apiKey = process.env.COOLSMS_API_KEY;
   const apiSecret = process.env.COOLSMS_API_SECRET;
   const from = process.env.COOLSMS_FROM;
-  if (!apiKey || !apiSecret || !from) return { ok: false, error: 'SMS API ë¯¸ì¤ì ' };
+  if (!apiKey || !apiSecret || !from) return { ok: false, error: 'SMS API Ã«Â¯Â¸Ã¬ÂÂ¤Ã¬Â Â' };
  
   const crypto = require('crypto');
   const date = new Date().toISOString();
@@ -299,7 +299,7 @@ async function sendSMSUtil(to, msg, subject) {
   const signature = crypto.createHmac('sha256', apiSecret).update(date + salt).digest('hex');
   const msgType = Buffer.byteLength(msg, 'utf8') > 90 ? 'LMS' : 'SMS';
  
-  // LMSì¼ ëë§ subject í¬í¨ (subject ìì¼ë©´ ë³¸ë¬¸ ì²«ì¤ì´ ì ëª©ì¼ë¡ ìë ì¶ì¶ë¨)
+  // LMSÃ¬ÂÂ¼ Ã«ÂÂÃ«Â§Â subject Ã­ÂÂ¬Ã­ÂÂ¨ (subject Ã¬ÂÂÃ¬ÂÂ¼Ã«Â©Â´ Ã«Â³Â¸Ã«Â¬Â¸ Ã¬Â²Â«Ã¬Â¤ÂÃ¬ÂÂ´ Ã¬Â ÂÃ«ÂªÂ©Ã¬ÂÂ¼Ã«Â¡Â Ã¬ÂÂÃ«ÂÂ Ã¬Â¶ÂÃ¬Â¶ÂÃ«ÂÂ¨)
   const msgObj = { to: to.replace(/-/g,''), from: from.replace(/-/g,''), text: msg, type: msgType };
   if (msgType === 'LMS' && subject) msgObj.subject = subject.slice(0, 20);
  
@@ -314,61 +314,61 @@ async function sendSMSUtil(to, msg, subject) {
   return response.ok ? { ok: true } : { ok: false, error: (await response.json()).errorMessage };
 }
  
-// ââ ê³ì½ì PDF ìë¡ë & SMS ë°ì¡ âââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ PDF Ã¬ÂÂÃ«Â¡ÂÃ«ÂÂ & SMS Ã«Â°ÂÃ¬ÂÂ¡ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.post('/api/contract/upload', async (req, res) => {
   const { pdfBase64, customerPhone, ownerPhone, customerName, companyName, companyPhone } = req.body;
  
   if (!pdfBase64 || !customerPhone) {
-    return res.status(400).json({ error: 'íì ë°ì´í°ê° ììµëë¤' });
+    return res.status(400).json({ error: 'Ã­ÂÂÃ¬ÂÂ Ã«ÂÂ°Ã¬ÂÂ´Ã­ÂÂ°ÃªÂ°Â Ã¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤' });
   }
  
   try {
-    // base64 â Buffer ë³í
+    // base64 Ã¢ÂÂ Buffer Ã«Â³ÂÃ­ÂÂ
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const timestamp = Date.now();
     const fileName = `${timestamp}_${customerPhone.replace(/-/g,'')}.pdf`;
     const filePath = `contracts/${fileName}`;
  
-    // Supabase Storage ìë¡ë
+    // Supabase Storage Ã¬ÂÂÃ«Â¡ÂÃ«ÂÂ
     const { error: uploadError } = await supabase.storage
       .from('ssak-contracts')
       .upload(filePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
  
     if (uploadError) throw uploadError;
  
-    // Public URL ìì±
+    // Public URL Ã¬ÂÂÃ¬ÂÂ±
     const { data: urlData } = supabase.storage
       .from('ssak-contracts')
       .getPublicUrl(filePath);
  
     const pdfUrl = urlData.publicUrl;
  
-    // ê³ì½ì SMS ë¬¸êµ¬
-    const customerMsg = `ð [${companyName||'ìíë¡í´ë¦°'}] ê³ì½ì ìë´\n${customerName}ë, ê³ì½ìê° ìì±ëììµëë¤.\n\nìë ë§í¬ìì íì¸ ë° ë³´ê´íì¸ì:\n${pdfUrl}\n\në¬¸ì: ${companyPhone||''}`;
-    const ownerMsg = `ð ê³ì½ì ì²´ê²° ìë£\nê³ ê°: ${customerName}ë (${customerPhone})\n\nê³ì½ì ë§í¬:\n${pdfUrl}`;
+    // ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ SMS Ã«Â¬Â¸ÃªÂµÂ¬
+    const customerMsg = `Ã°ÂÂÂ [${companyName||'Ã¬ÂÂÃ­ÂÂÃ«Â¡ÂÃ­ÂÂ´Ã«Â¦Â°'}] ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«ÂÂ´\n${customerName}Ã«ÂÂ, ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂÃªÂ°Â Ã¬ÂÂÃ¬ÂÂ±Ã«ÂÂÃ¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤.\n\nÃ¬ÂÂÃ«ÂÂ Ã«Â§ÂÃ­ÂÂ¬Ã¬ÂÂÃ¬ÂÂ Ã­ÂÂÃ¬ÂÂ¸ Ã«Â°Â Ã«Â³Â´ÃªÂ´ÂÃ­ÂÂÃ¬ÂÂ¸Ã¬ÂÂ:\n${pdfUrl}\n\nÃ«Â¬Â¸Ã¬ÂÂ: ${companyPhone||''}`;
+    const ownerMsg = `Ã°ÂÂÂ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬Â²Â´ÃªÂ²Â° Ã¬ÂÂÃ«Â£Â\nÃªÂ³Â ÃªÂ°Â: ${customerName}Ã«ÂÂ (${customerPhone})\n\nÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã«Â§ÂÃ­ÂÂ¬:\n${pdfUrl}`;
  
-    // ê³ ê° SMS ë°ì¡
+    // ÃªÂ³Â ÃªÂ°Â SMS Ã«Â°ÂÃ¬ÂÂ¡
     await sendSMSUtil(customerPhone, customerMsg);
  
-    // ì¬ì¥ë SMS ë°ì¡ (ë²í¸ê° ìê³  ê³ ê°ê³¼ ë¤ë¥¼ ë)
+    // Ã¬ÂÂ¬Ã¬ÂÂ¥Ã«ÂÂ SMS Ã«Â°ÂÃ¬ÂÂ¡ (Ã«Â²ÂÃ­ÂÂ¸ÃªÂ°Â Ã¬ÂÂÃªÂ³Â  ÃªÂ³Â ÃªÂ°ÂÃªÂ³Â¼ Ã«ÂÂ¤Ã«Â¥Â¼ Ã«ÂÂ)
     if (ownerPhone && ownerPhone.replace(/-/g,'') !== customerPhone.replace(/-/g,'')) {
       await sendSMSUtil(ownerPhone, ownerMsg);
     }
  
-    console.log(`ê³ì½ì ìë¡ë ìë£: ${filePath}`);
+    console.log(`ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«Â¡ÂÃ«ÂÂ Ã¬ÂÂÃ«Â£Â: ${filePath}`);
     res.json({ success: true, pdfUrl });
  
   } catch (err) {
-    console.error('ê³ì½ì ìë¡ë ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
+    console.error('ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«Â¡ÂÃ«ÂÂ Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â: ' + err.message });
   }
 });
  
-// ââ ë¹ëë©´ ê³ì½ì: ì ì¥ & ìëªë§í¬ ë°ì¡ ââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã«Â¹ÂÃ«ÂÂÃ«Â©Â´ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ: Ã¬Â ÂÃ¬ÂÂ¥ & Ã¬ÂÂÃ«ÂªÂÃ«Â§ÂÃ­ÂÂ¬ Ã«Â°ÂÃ¬ÂÂ¡ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.post('/api/contract/create', async (req, res) => {
   const { contractData, ownerSignature, ownerPhone, customerPhone, customerName, companyName, companyPhone } = req.body;
   if (!contractData || !customerPhone) {
-    return res.status(400).json({ error: 'íì ë°ì´í°ê° ììµëë¤' });
+    return res.status(400).json({ error: 'Ã­ÂÂÃ¬ÂÂ Ã«ÂÂ°Ã¬ÂÂ´Ã­ÂÂ°ÃªÂ°Â Ã¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤' });
   }
   try {
     const crypto = require('crypto');
@@ -383,46 +383,46 @@ app.post('/api/contract/create', async (req, res) => {
     if (error) throw error;
  
     const signUrl = `https://ssakapp.co.kr/sign.html?token=${token}`;
-    const msg = `[${companyName||'ìíë¡í´ë¦°'}] ê³ì½ì ìëª ìì²­\n\n${customerName||'ê³ ê°'}ë, ìë ë§í¬ìì ê³ì½ì ë´ì©ì íì¸íê³  ìëªí´ ì£¼ì¸ì.\n\n${signUrl}\n\në§í¬ë 7ì¼ê° ì í¨í©ëë¤.\n\në¬¸ì: ${companyPhone||''}`;
+    const msg = `[${companyName||'Ã¬ÂÂÃ­ÂÂÃ«Â¡ÂÃ­ÂÂ´Ã«Â¦Â°'}] ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ¬Â²Â­\n\n${customerName||'ÃªÂ³Â ÃªÂ°Â'}Ã«ÂÂ, Ã¬ÂÂÃ«ÂÂ Ã«Â§ÂÃ­ÂÂ¬Ã¬ÂÂÃ¬ÂÂ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã«ÂÂ´Ã¬ÂÂ©Ã¬ÂÂ Ã­ÂÂÃ¬ÂÂ¸Ã­ÂÂÃªÂ³Â  Ã¬ÂÂÃ«ÂªÂÃ­ÂÂ´ Ã¬Â£Â¼Ã¬ÂÂ¸Ã¬ÂÂ.\n\n${signUrl}\n\nÃ«Â§ÂÃ­ÂÂ¬Ã«ÂÂ 7Ã¬ÂÂ¼ÃªÂ°Â Ã¬ÂÂ Ã­ÂÂ¨Ã­ÂÂ©Ã«ÂÂÃ«ÂÂ¤.\n\nÃ«Â¬Â¸Ã¬ÂÂ: ${companyPhone||''}`;
  
-    await sendSMSUtil(customerPhone.replace(/-/g,''), msg, `[${companyName||'ìíë¡í´ë¦°'}] ê³ì½ì`);
+    await sendSMSUtil(customerPhone.replace(/-/g,''), msg, `[${companyName||'Ã¬ÂÂÃ­ÂÂÃ«Â¡ÂÃ­ÂÂ´Ã«Â¦Â°'}] ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ`);
  
-    console.log(`ê³ì½ì ìì±: ${token}`);
+    console.log(`ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ¬ÂÂ±: ${token}`);
     res.json({ success: true, token, signUrl });
   } catch (err) {
-    console.error('ê³ì½ì ìì± ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
+    console.error('ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ¬ÂÂ± Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â: ' + err.message });
   }
 });
  
-// ââ ë¹ëë©´ ê³ì½ì: ê³ ê° ì¡°í âââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã«Â¹ÂÃ«ÂÂÃ«Â©Â´ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ: ÃªÂ³Â ÃªÂ°Â Ã¬Â¡Â°Ã­ÂÂ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.get('/api/contract/:token', async (req, res) => {
   const { token } = req.params;
   try {
     const { data, error } = await supabase.from('pending_contracts').select('*').eq('token', token).single();
-    if (error || !data) return res.status(404).json({ error: 'ê³ì½ìë¥¼ ì°¾ì ì ììµëë¤' });
-    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: 'ë§ë£ë ê³ì½ììëë¤' });
+    if (error || !data) return res.status(404).json({ error: 'ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂÃ«Â¥Â¼ Ã¬Â°Â¾Ã¬ÂÂ Ã¬ÂÂ Ã¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤' });
+    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: 'Ã«Â§ÂÃ«Â£ÂÃ«ÂÂ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂÃ¬ÂÂÃ«ÂÂÃ«ÂÂ¤' });
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ââ ë¹ëë©´ ê³ì½ì: ê³ ê° ìëª ìë£ & PDF ìì± ââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã«Â¹ÂÃ«ÂÂÃ«Â©Â´ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ: ÃªÂ³Â ÃªÂ°Â Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ«Â£Â & PDF Ã¬ÂÂÃ¬ÂÂ± Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.post('/api/contract/:token/sign', async (req, res) => {
   const { token } = req.params;
   const { customerSignature, pdfBase64 } = req.body;
-  if (!customerSignature) return res.status(400).json({ error: 'ìëªì´ ììµëë¤' });
+  if (!customerSignature) return res.status(400).json({ error: 'Ã¬ÂÂÃ«ÂªÂÃ¬ÂÂ´ Ã¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤' });
  
   try {
     const { data: contract, error } = await supabase.from('pending_contracts').select('*').eq('token', token).single();
-    if (error || !contract) return res.status(404).json({ error: 'ê³ì½ìë¥¼ ì°¾ì ì ììµëë¤' });
-    if (contract.status === 'completed') return res.status(400).json({ error: 'ì´ë¯¸ ìëªë ê³ì½ììëë¤' });
+    if (error || !contract) return res.status(404).json({ error: 'ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂÃ«Â¥Â¼ Ã¬Â°Â¾Ã¬ÂÂ Ã¬ÂÂ Ã¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤' });
+    if (contract.status === 'completed') return res.status(400).json({ error: 'Ã¬ÂÂ´Ã«Â¯Â¸ Ã¬ÂÂÃ«ÂªÂÃ«ÂÂ ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂÃ¬ÂÂÃ«ÂÂÃ«ÂÂ¤' });
  
     const cd = contract.contract_data;
     let pdfUrl = null;
  
-    // PDF ìë¡ë
+    // PDF Ã¬ÂÂÃ«Â¡ÂÃ«ÂÂ
     if (pdfBase64) {
       const pdfBuffer = Buffer.from(pdfBase64, 'base64');
       const fileName = `${Date.now()}_${token.slice(0,8)}.pdf`;
@@ -434,40 +434,40 @@ app.post('/api/contract/:token/sign', async (req, res) => {
       }
     }
  
-    // ìí ìë°ì´í¸
+    // Ã¬ÂÂÃ­ÂÂ Ã¬ÂÂÃ«ÂÂ°Ã¬ÂÂ´Ã­ÂÂ¸
     await supabase.from('pending_contracts').update({
       customer_signature: customerSignature,
       status: 'completed',
       pdf_url: pdfUrl
     }).eq('token', token);
  
-    // ìì¸¡ SMS ë°ì¡
-    const companyName = cd.companyName || 'ìíë¡í´ë¦°';
+    // Ã¬ÂÂÃ¬Â¸Â¡ SMS Ã«Â°ÂÃ¬ÂÂ¡
+    const companyName = cd.companyName || 'Ã¬ÂÂÃ­ÂÂÃ«Â¡ÂÃ­ÂÂ´Ã«Â¦Â°';
     const companyPhone = cd.companyPhone || '';
-    const customerName = cd.name || 'ê³ ê°';
+    const customerName = cd.name || 'ÃªÂ³Â ÃªÂ°Â';
     const customerPhone = cd.phone || '';
-    const linkMsg = pdfUrl ? `\n\nê³ì½ì PDF: ${pdfUrl}` : '';
+    const linkMsg = pdfUrl ? `\n\nÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ PDF: ${pdfUrl}` : '';
  
-    const customerMsg = `[${companyName}] ê³ì½ì ìëª ìë£!\n${customerName}ëì ìëªì´ ìë£ëììµëë¤.${linkMsg}\n\në¬¸ì: ${companyPhone}`;
-    const ownerMsg = `[ê³ì½ì ìëª ìë£]\nê³ ê°: ${customerName}ë (${customerPhone})\nìëªì´ ìë£ëììµëë¤.${linkMsg}`;
+    const customerMsg = `[${companyName}] ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ«Â£Â!\n${customerName}Ã«ÂÂÃ¬ÂÂ Ã¬ÂÂÃ«ÂªÂÃ¬ÂÂ´ Ã¬ÂÂÃ«Â£ÂÃ«ÂÂÃ¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤.${linkMsg}\n\nÃ«Â¬Â¸Ã¬ÂÂ: ${companyPhone}`;
+    const ownerMsg = `[ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ«Â£Â]\nÃªÂ³Â ÃªÂ°Â: ${customerName}Ã«ÂÂ (${customerPhone})\nÃ¬ÂÂÃ«ÂªÂÃ¬ÂÂ´ Ã¬ÂÂÃ«Â£ÂÃ«ÂÂÃ¬ÂÂÃ¬ÂÂµÃ«ÂÂÃ«ÂÂ¤.${linkMsg}`;
  
-    if (customerPhone) await sendSMSUtil(customerPhone.replace(/-/g,''), customerMsg, `[${companyName}] ìëª ìë£`);
-    if (companyPhone) await sendSMSUtil(companyPhone.replace(/-/g,''), ownerMsg, 'ê³ì½ì ìëª ìë£');
+    if (customerPhone) await sendSMSUtil(customerPhone.replace(/-/g,''), customerMsg, `[${companyName}] Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ«Â£Â`);
+    if (companyPhone) await sendSMSUtil(companyPhone.replace(/-/g,''), ownerMsg, 'ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ«Â£Â');
  
-    console.log(`ê³ì½ì ìëª ìë£: ${token}`);
+    console.log(`ÃªÂ³ÂÃ¬ÂÂ½Ã¬ÂÂ Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ«Â£Â: ${token}`);
     res.json({ success: true, pdfUrl });
   } catch (err) {
-    console.error('ìëª ìë£ ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
+    console.error('Ã¬ÂÂÃ«ÂªÂ Ã¬ÂÂÃ«Â£Â Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â: ' + err.message });
   }
 });
  
-// ââ ìì½ ì ì²­ ì ì âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã¬ÂÂÃ¬ÂÂ½ Ã¬ÂÂ Ã¬Â²Â­ Ã¬Â ÂÃ¬ÂÂ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.post('/api/booking', async (req, res) => {
   try {
     const { name, phone, address, size, type, date, time, notes, price, companyName } = req.body;
     if (!name || !phone || !address) {
-      return res.status(400).json({ error: '이름, 연락처, 주소는 필수입니다.' });
+      return res.status(400).json({ error: 'ì´ë¦, ì°ë½ì², ì£¼ìë íììëë¤.' });
     }
     const { data, error } = await supabase
       .from('bookings')
@@ -476,7 +476,7 @@ app.post('/api/booking', async (req, res) => {
         phone: phone.replace(/-/g, ''),
         address,
         size: size ? parseInt(size) : null,
-        type: type || '입주 전 청소',
+        type: type || 'ìì£¼ ì  ì²­ì',
         date: date || null,
         time: time || null,
         notes: notes || null,
@@ -489,7 +489,7 @@ app.post('/api/booking', async (req, res) => {
       .single();
     if (error) throw error;
 
-    // SMS 알림 (실패해도 예약 등록은 성공 처리)
+    // SMS ìë¦¼ (ì¤í¨í´ë ìì½ ë±ë¡ì ì±ê³µ ì²ë¦¬)
     try {
       const ownerPhone = process.env.OWNER_PHONE;
       const apiKey = process.env.COOLSMS_API_KEY;
@@ -500,7 +500,7 @@ app.post('/api/booking', async (req, res) => {
         const timestamp = new Date().toISOString().replace(/[^0-9]/g,'').slice(0,14);
         const salt = Math.random().toString(36).substr(2,16);
         const signature = crypto.createHmac('sha256', apiSecret).update(timestamp+salt).digest('hex');
-        const msg = `[싹싹] 새 예약신청!\n${name}(${phone})\n${date} ${time}\n${type} ${size}평\n${address}`;
+        const msg = `[ì¹ì¹] ì ìì½ì ì²­!\n${name}(${phone})\n${date} ${time}\n${type} ${size}í\n${address}`;
         await fetch('https://api.coolsms.co.kr/messages/v4/send', {
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':`HMAC-SHA256 apiKey=${apiKey}, date=${timestamp}, salt=${salt}, signature=${signature}`},
@@ -508,22 +508,22 @@ app.post('/api/booking', async (req, res) => {
         });
       }
     } catch(smsErr) {
-      console.log('SMS 알림 실패(무시):', smsErr.message);
+      console.log('SMS ìë¦¼ ì¤í¨(ë¬´ì):', smsErr.message);
     }
 
     res.json({ success: true, data });
   } catch (err) {
-    console.error('예약 접수 오류:', err);
-    res.status(500).json({ error: '서버 오류: ' + err.message });
+    console.error('ìì½ ì ì ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
   }
 });
 
 app.get('/api/bookings', async (req, res) => {
   try {
-    // x-admin-key 헤더 또는 adminKey 쿼리 파라미터 모두 허용
+    // x-admin-key í¤ë ëë adminKey ì¿¼ë¦¬ íë¼ë¯¸í° ëª¨ë íì©
     const adminKey = req.headers['x-admin-key'] || req.query.adminKey;
     if (adminKey !== process.env.ADMIN_KEY) {
-      return res.status(401).json({ error: '인증 실패' });
+      return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
     }
     const { status } = req.query;
     let query = supabase.from('bookings').select('*').order('created_at', { ascending: false });
@@ -540,7 +540,7 @@ app.put('/api/bookings/:id/status', async (req, res) => {
   try {
     const adminKey = req.headers['x-admin-key'] || req.query.adminKey;
     if (adminKey !== process.env.ADMIN_KEY) {
-      return res.status(401).json({ error: '인증 실패' });
+      return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
     }
     const { id } = req.params;
     const { status } = req.body;
@@ -556,7 +556,7 @@ app.put('/api/bookings/:id/status', async (req, res) => {
 app.put('/api/bookings/:id/status', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
+    return res.status(401).json({ error: 'Ã¬ÂÂ¸Ã¬Â¦Â Ã¬ÂÂ¤Ã­ÂÂ¨' });
   }
  
   const { id } = req.params;
@@ -574,35 +574,35 @@ app.put('/api/bookings/:id/status', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
  
-// ââ ìì½ë§í¬ í í° ìì± (URL ë¨ì¶ì©) âââââââââââââââââââââââââââââââââââââââ
-// ê²¬ì  ë°ì´í°ë¥¼ ìë²ì ì ì¥ â ì§§ì í í° ë°í â booking.html?t={token}
+// Ã¢ÂÂÃ¢ÂÂ Ã¬ÂÂÃ¬ÂÂ½Ã«Â§ÂÃ­ÂÂ¬ Ã­ÂÂ Ã­ÂÂ° Ã¬ÂÂÃ¬ÂÂ± (URL Ã«ÂÂ¨Ã¬Â¶ÂÃ¬ÂÂ©) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ÃªÂ²Â¬Ã¬Â Â Ã«ÂÂ°Ã¬ÂÂ´Ã­ÂÂ°Ã«Â¥Â¼ Ã¬ÂÂÃ«Â²ÂÃ¬ÂÂ Ã¬Â ÂÃ¬ÂÂ¥ Ã¢ÂÂ Ã¬Â§Â§Ã¬ÂÂ Ã­ÂÂ Ã­ÂÂ° Ã«Â°ÂÃ­ÂÂ Ã¢ÂÂ booking.html?t={token}
 app.post('/api/booking/token', async (req, res) => {
   const { name, phone, size, type, price, companyName } = req.body;
   try {
     const crypto = require('crypto');
-    const token = crypto.randomBytes(6).toString('hex'); // 12ìë¦¬ ì§§ì í í°
+    const token = crypto.randomBytes(6).toString('hex'); // 12Ã¬ÂÂÃ«Â¦Â¬ Ã¬Â§Â§Ã¬ÂÂ Ã­ÂÂ Ã­ÂÂ°
  
     const { error } = await supabase.from('booking_tokens').insert([{
       token,
       quote_data: { name, phone, size, type, price, companyName },
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7ì¼ ì í¨
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7Ã¬ÂÂ¼ Ã¬ÂÂ Ã­ÂÂ¨
     }]);
     if (error) throw error;
  
     const finalUrl = `https://ssakapp.co.kr/booking.html?t=${token}`;
     res.json({ success: true, url: finalUrl, token });
   } catch (err) {
-    console.error('í í° ìì± ì¤ë¥:', err);
-    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
+    console.error('Ã­ÂÂ Ã­ÂÂ° Ã¬ÂÂÃ¬ÂÂ± Ã¬ÂÂ¤Ã«Â¥Â:', err);
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â: ' + err.message });
   }
 });
  
-// ââ ìì½ë§í¬ í í° ì¡°í ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Ã¬ÂÂÃ¬ÂÂ½Ã«Â§ÂÃ­ÂÂ¬ Ã­ÂÂ Ã­ÂÂ° Ã¬Â¡Â°Ã­ÂÂ Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 app.get('/api/booking/token/:token', async (req, res) => {
   const { token } = req.params;
   try {
@@ -612,19 +612,19 @@ app.get('/api/booking/token/:token', async (req, res) => {
       .eq('token', token)
       .single();
  
-    if (error || !data) return res.status(404).json({ error: 'ì í¨íì§ ìì ë§í¬ìëë¤' });
-    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: 'ë§ë£ë ë§í¬ìëë¤ (7ì¼ ì´ê³¼)' });
+    if (error || !data) return res.status(404).json({ error: 'Ã¬ÂÂ Ã­ÂÂ¨Ã­ÂÂÃ¬Â§Â Ã¬ÂÂÃ¬ÂÂ Ã«Â§ÂÃ­ÂÂ¬Ã¬ÂÂÃ«ÂÂÃ«ÂÂ¤' });
+    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: 'Ã«Â§ÂÃ«Â£ÂÃ«ÂÂ Ã«Â§ÂÃ­ÂÂ¬Ã¬ÂÂÃ«ÂÂÃ«ÂÂ¤ (7Ã¬ÂÂ¼ Ã¬Â´ÂÃªÂ³Â¼)' });
  
     res.json({ success: true, data: data.quote_data });
   } catch (err) {
-    res.status(500).json({ error: 'ìë² ì¤ë¥' });
+    res.status(500).json({ error: 'Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã«Â¥Â' });
   }
 });
  
-// ìë² ìì
+// Ã¬ÂÂÃ«Â²Â Ã¬ÂÂÃ¬ÂÂ
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`â ì¹ì¹ ìë² ì¤í ì¤ - í¬í¸ ${PORT}`);
-  console.log(`ð§¹ ì¹ì¹ ìì£¼ì²­ì ì ë¬¸ì¸ íë«í¼`);
+  console.log(`Ã¢ÂÂ Ã¬ÂÂ¹Ã¬ÂÂ¹ Ã¬ÂÂÃ«Â²Â Ã¬ÂÂ¤Ã­ÂÂ Ã¬Â¤Â - Ã­ÂÂ¬Ã­ÂÂ¸ ${PORT}`);
+  console.log(`Ã°ÂÂ§Â¹ Ã¬ÂÂ¹Ã¬ÂÂ¹ Ã¬ÂÂÃ¬Â£Â¼Ã¬Â²Â­Ã¬ÂÂ Ã¬Â ÂÃ«Â¬Â¸Ã¬ÂÂ¸ Ã­ÂÂÃ«ÂÂ«Ã­ÂÂ¼`);
 });
  
