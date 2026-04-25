@@ -7,32 +7,32 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ limit: '20mb', extended: true }));
  
-// Supabase 연결
+// Supabase ì°ê²°
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
  
-// ── 서버 상태 확인 ──────────────────────────────
+// ââ ìë² ìí íì¸ ââââââââââââââââââââââââââââââ
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
-    message: '싹싹 서버 정상 작동 중 🧹',
+    message: 'ì¹ì¹ ìë² ì ì ìë ì¤ ð§¹',
     version: '1.0.0'
   });
 });
  
-// ── 구독자 사전 신청 ────────────────────────────
-// 랜딩페이지에서 사전 신청 시 호출
+// ââ êµ¬ëì ì¬ì  ì ì²­ ââââââââââââââââââââââââââââ
+// ëë©íì´ì§ìì ì¬ì  ì ì²­ ì í¸ì¶
 app.post('/api/subscribe', async (req, res) => {
   const { company_name, phone, email, plan } = req.body;
  
   if (!company_name || !phone) {
-    return res.status(400).json({ error: '업체명과 연락처는 필수입니다' });
+    return res.status(400).json({ error: 'ìì²´ëªê³¼ ì°ë½ì²ë íììëë¤' });
   }
  
   try {
-    // 중복 체크
+    // ì¤ë³µ ì²´í¬
     const { data: existing } = await supabase
       .from('subscribers')
       .select('id')
@@ -40,10 +40,10 @@ app.post('/api/subscribe', async (req, res) => {
       .single();
  
     if (existing) {
-      return res.json({ success: true, message: '이미 신청하셨습니다!', duplicate: true });
+      return res.json({ success: true, message: 'ì´ë¯¸ ì ì²­íì¨ìµëë¤!', duplicate: true });
     }
  
-    // 구독자 저장
+    // êµ¬ëì ì ì¥
     const { data: subscriber, error } = await supabase
       .from('subscribers')
       .insert([{
@@ -58,33 +58,33 @@ app.post('/api/subscribe', async (req, res) => {
  
     if (error) throw error;
  
-    // 기본 업체 설정 자동 생성
+    // ê¸°ë³¸ ìì²´ ì¤ì  ìë ìì±
     await supabase
       .from('business_settings')
       .insert([{
         subscriber_id: subscriber.id,
         company_name,
         phone,
-        greeting: `안녕하세요! 😊 ${company_name} 입주청소 전문팀입니다.`,
+        greeting: `ìëíì¸ì! ð ${company_name} ìì£¼ì²­ì ì ë¬¸íìëë¤.`,
       }]);
  
     res.json({
       success: true,
-      message: '신청이 완료되었습니다! 출시 시 연락드릴게요 😊',
+      message: 'ì ì²­ì´ ìë£ëììµëë¤! ì¶ì ì ì°ë½ëë¦´ê²ì ð',
       id: subscriber.id
     });
  
   } catch (err) {
-    console.error('구독 신청 오류:', err);
-    res.status(500).json({ error: '서버 오류가 발생했습니다' });
+    console.error('êµ¬ë ì ì²­ ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥ê° ë°ìíìµëë¤' });
   }
 });
  
-// ── 구독자 목록 조회 (관리자용) ─────────────────
+// ââ êµ¬ëì ëª©ë¡ ì¡°í (ê´ë¦¬ìì©) âââââââââââââââââ
 app.get('/api/subscribers', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: '인증 실패' });
+    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
   }
  
   try {
@@ -97,16 +97,16 @@ app.get('/api/subscribers', async (req, res) => {
     res.json({ success: true, count: data.length, data });
  
   } catch (err) {
-    console.error('구독자 조회 오류:', err);
-    res.status(500).json({ error: '서버 오류' });
+    console.error('êµ¬ëì ì¡°í ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// ── 구독자 상태 변경 (관리자용) ─────────────────
+// ââ êµ¬ëì ìí ë³ê²½ (ê´ë¦¬ìì©) âââââââââââââââââ
 app.put('/api/subscribers/:id/status', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: '인증 실패' });
+    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
   }
  
   const { id } = req.params;
@@ -114,7 +114,7 @@ app.put('/api/subscribers/:id/status', async (req, res) => {
  
   const validStatuses = ['pending', 'active', 'paused', 'cancelled'];
   if (!validStatuses.includes(status)) {
-    return res.status(400).json({ error: '유효하지 않은 상태값입니다' });
+    return res.status(400).json({ error: 'ì í¨íì§ ìì ìíê°ìëë¤' });
   }
  
   try {
@@ -129,12 +129,12 @@ app.put('/api/subscribers/:id/status', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    console.error('상태 변경 오류:', err);
-    res.status(500).json({ error: '서버 오류' });
+    console.error('ìí ë³ê²½ ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// ── 업체 설정 조회 ───────────────────────────────
+// ââ ìì²´ ì¤ì  ì¡°í âââââââââââââââââââââââââââââââ
 app.get('/api/settings/:id', async (req, res) => {
   const { id } = req.params;
  
@@ -149,12 +149,12 @@ app.get('/api/settings/:id', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    console.error('설정 조회 오류:', err);
-    res.status(500).json({ error: '서버 오류' });
+    console.error('ì¤ì  ì¡°í ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// ── 업체 설정 업데이트 ───────────────────────────
+// ââ ìì²´ ì¤ì  ìë°ì´í¸ âââââââââââââââââââââââââââ
 app.put('/api/settings/:id', async (req, res) => {
   const { id } = req.params;
   const settings = req.body;
@@ -171,12 +171,12 @@ app.put('/api/settings/:id', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    console.error('설정 업데이트 오류:', err);
-    res.status(500).json({ error: '서버 오류' });
+    console.error('ì¤ì  ìë°ì´í¸ ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// ── 인력 풀 목록 조회 ───────────────────────────
+// ââ ì¸ë ¥ í ëª©ë¡ ì¡°í âââââââââââââââââââââââââââ
 app.get('/api/workforce', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -189,16 +189,16 @@ app.get('/api/workforce', async (req, res) => {
     res.json({ success: true, count: data.length, data });
  
   } catch (err) {
-    console.error('인력 풀 조회 오류:', err);
-    res.status(500).json({ error: '서버 오류' });
+    console.error('ì¸ë ¥ í ì¡°í ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// ── 통계 (관리자용) ──────────────────────────────
+// ââ íµê³ (ê´ë¦¬ìì©) ââââââââââââââââââââââââââââââ
 app.get('/api/stats', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: '인증 실패' });
+    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
   }
  
   try {
@@ -218,25 +218,25 @@ app.get('/api/stats', async (req, res) => {
     res.json({ success: true, stats });
  
   } catch (err) {
-    console.error('통계 조회 오류:', err);
-    res.status(500).json({ error: '서버 오류' });
+    console.error('íµê³ ì¡°í ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// ── SMS 발송 (CoolSMS) ────────────────────────
+// ââ SMS ë°ì¡ (CoolSMS) ââââââââââââââââââââââââ
 app.post('/api/sms/send', async (req, res) => {
   const { to, msg, subject } = req.body;
  
-  // 환경변수에서 API 키 로드 (사용자에게 노출 안 됨)
+  // íê²½ë³ììì API í¤ ë¡ë (ì¬ì©ììê² ë¸ì¶ ì ë¨)
   const apiKey = process.env.COOLSMS_API_KEY;
   const apiSecret = process.env.COOLSMS_API_SECRET;
   const from = process.env.COOLSMS_FROM;
  
   if (!apiKey || !apiSecret || !from) {
-    return res.status(500).json({ error: 'SMS API가 설정되지 않았습니다.' });
+    return res.status(500).json({ error: 'SMS APIê° ì¤ì ëì§ ìììµëë¤.' });
   }
   if (!to || !msg) {
-    return res.status(400).json({ error: '수신번호와 메시지는 필수입니다' });
+    return res.status(400).json({ error: 'ìì ë²í¸ì ë©ìì§ë íììëë¤' });
   }
  
   try {
@@ -262,9 +262,9 @@ app.post('/api/sms/send', async (req, res) => {
           from: from.replace(/-/g, ''),
           text: msg,
           type: msgType,
-          // LMS: 전달받은 subject 사용 (없으면 공백 대신 기본값)
-          // subject가 명시적으로 설정되면 CoolSMS가 첫 줄 자동추출 안 함
-          ...(msgType === 'LMS' ? { subject: (subject && subject.trim()) ? subject.trim().slice(0,20) : '[서프로클린] 문자' } : {})
+          // LMS: ì ë¬ë°ì subject ì¬ì© (ìì¼ë©´ ê³µë°± ëì  ê¸°ë³¸ê°)
+          // subjectê° ëªìì ì¼ë¡ ì¤ì ëë©´ CoolSMSê° ì²« ì¤ ìëì¶ì¶ ì í¨
+          ...(msgType === 'LMS' ? { subject: (subject && subject.trim()) ? subject.trim().slice(0,20) : '[ìíë¡í´ë¦°] ë¬¸ì' } : {})
         }
       })
     });
@@ -272,26 +272,26 @@ app.post('/api/sms/send', async (req, res) => {
     const data = await response.json();
  
     if (response.ok) {
-      console.log(`SMS 발송 완료: ${to} (${msgType})`);
-      res.json({ success: true, message: '발송 완료', type: msgType });
+      console.log(`SMS ë°ì¡ ìë£: ${to} (${msgType})`);
+      res.json({ success: true, message: 'ë°ì¡ ìë£', type: msgType });
     } else {
-      console.error('SMS 발송 실패:', data);
-      res.status(400).json({ error: data.errorMessage || '발송 실패' });
+      console.error('SMS ë°ì¡ ì¤í¨:', data);
+      res.status(400).json({ error: data.errorMessage || 'ë°ì¡ ì¤í¨' });
     }
  
   } catch (err) {
-    console.error('SMS 발송 오류:', err);
-    res.status(500).json({ error: '서버 오류가 발생했습니다' });
+    console.error('SMS ë°ì¡ ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥ê° ë°ìíìµëë¤' });
   }
 });
  
-// ── SMS 발송 공통 함수 ───────────────────────────
-// subject 미설정 시 CoolSMS가 본문 첫 줄을 자동 추출 → [Web발신] 앞뒤 중복 원인
+// ââ SMS ë°ì¡ ê³µíµ í¨ì âââââââââââââââââââââââââââ
+// subject ë¯¸ì¤ì  ì CoolSMSê° ë³¸ë¬¸ ì²« ì¤ì ìë ì¶ì¶ â [Webë°ì ] ìë¤ ì¤ë³µ ìì¸
 async function sendSMSUtil(to, msg, subject) {
   const apiKey = process.env.COOLSMS_API_KEY;
   const apiSecret = process.env.COOLSMS_API_SECRET;
   const from = process.env.COOLSMS_FROM;
-  if (!apiKey || !apiSecret || !from) return { ok: false, error: 'SMS API 미설정' };
+  if (!apiKey || !apiSecret || !from) return { ok: false, error: 'SMS API ë¯¸ì¤ì ' };
  
   const crypto = require('crypto');
   const date = new Date().toISOString();
@@ -299,7 +299,7 @@ async function sendSMSUtil(to, msg, subject) {
   const signature = crypto.createHmac('sha256', apiSecret).update(date + salt).digest('hex');
   const msgType = Buffer.byteLength(msg, 'utf8') > 90 ? 'LMS' : 'SMS';
  
-  // LMS일 때만 subject 포함 (subject 없으면 본문 첫줄이 제목으로 자동 추출됨)
+  // LMSì¼ ëë§ subject í¬í¨ (subject ìì¼ë©´ ë³¸ë¬¸ ì²«ì¤ì´ ì ëª©ì¼ë¡ ìë ì¶ì¶ë¨)
   const msgObj = { to: to.replace(/-/g,''), from: from.replace(/-/g,''), text: msg, type: msgType };
   if (msgType === 'LMS' && subject) msgObj.subject = subject.slice(0, 20);
  
@@ -314,61 +314,61 @@ async function sendSMSUtil(to, msg, subject) {
   return response.ok ? { ok: true } : { ok: false, error: (await response.json()).errorMessage };
 }
  
-// ── 계약서 PDF 업로드 & SMS 발송 ─────────────────
+// ââ ê³ì½ì PDF ìë¡ë & SMS ë°ì¡ âââââââââââââââââ
 app.post('/api/contract/upload', async (req, res) => {
   const { pdfBase64, customerPhone, ownerPhone, customerName, companyName, companyPhone } = req.body;
  
   if (!pdfBase64 || !customerPhone) {
-    return res.status(400).json({ error: '필수 데이터가 없습니다' });
+    return res.status(400).json({ error: 'íì ë°ì´í°ê° ììµëë¤' });
   }
  
   try {
-    // base64 → Buffer 변환
+    // base64 â Buffer ë³í
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const timestamp = Date.now();
     const fileName = `${timestamp}_${customerPhone.replace(/-/g,'')}.pdf`;
     const filePath = `contracts/${fileName}`;
  
-    // Supabase Storage 업로드
+    // Supabase Storage ìë¡ë
     const { error: uploadError } = await supabase.storage
       .from('ssak-contracts')
       .upload(filePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
  
     if (uploadError) throw uploadError;
  
-    // Public URL 생성
+    // Public URL ìì±
     const { data: urlData } = supabase.storage
       .from('ssak-contracts')
       .getPublicUrl(filePath);
  
     const pdfUrl = urlData.publicUrl;
  
-    // 계약서 SMS 문구
-    const customerMsg = `📋 [${companyName||'서프로클린'}] 계약서 안내\n${customerName}님, 계약서가 작성되었습니다.\n\n아래 링크에서 확인 및 보관하세요:\n${pdfUrl}\n\n문의: ${companyPhone||''}`;
-    const ownerMsg = `📋 계약서 체결 완료\n고객: ${customerName}님 (${customerPhone})\n\n계약서 링크:\n${pdfUrl}`;
+    // ê³ì½ì SMS ë¬¸êµ¬
+    const customerMsg = `ð [${companyName||'ìíë¡í´ë¦°'}] ê³ì½ì ìë´\n${customerName}ë, ê³ì½ìê° ìì±ëììµëë¤.\n\nìë ë§í¬ìì íì¸ ë° ë³´ê´íì¸ì:\n${pdfUrl}\n\në¬¸ì: ${companyPhone||''}`;
+    const ownerMsg = `ð ê³ì½ì ì²´ê²° ìë£\nê³ ê°: ${customerName}ë (${customerPhone})\n\nê³ì½ì ë§í¬:\n${pdfUrl}`;
  
-    // 고객 SMS 발송
+    // ê³ ê° SMS ë°ì¡
     await sendSMSUtil(customerPhone, customerMsg);
  
-    // 사장님 SMS 발송 (번호가 있고 고객과 다를 때)
+    // ì¬ì¥ë SMS ë°ì¡ (ë²í¸ê° ìê³  ê³ ê°ê³¼ ë¤ë¥¼ ë)
     if (ownerPhone && ownerPhone.replace(/-/g,'') !== customerPhone.replace(/-/g,'')) {
       await sendSMSUtil(ownerPhone, ownerMsg);
     }
  
-    console.log(`계약서 업로드 완료: ${filePath}`);
+    console.log(`ê³ì½ì ìë¡ë ìë£: ${filePath}`);
     res.json({ success: true, pdfUrl });
  
   } catch (err) {
-    console.error('계약서 업로드 오류:', err);
-    res.status(500).json({ error: '서버 오류: ' + err.message });
+    console.error('ê³ì½ì ìë¡ë ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
   }
 });
  
-// ── 비대면 계약서: 저장 & 서명링크 발송 ──────────────
+// ââ ë¹ëë©´ ê³ì½ì: ì ì¥ & ìëªë§í¬ ë°ì¡ ââââââââââââââ
 app.post('/api/contract/create', async (req, res) => {
   const { contractData, ownerSignature, ownerPhone, customerPhone, customerName, companyName, companyPhone } = req.body;
   if (!contractData || !customerPhone) {
-    return res.status(400).json({ error: '필수 데이터가 없습니다' });
+    return res.status(400).json({ error: 'íì ë°ì´í°ê° ììµëë¤' });
   }
   try {
     const crypto = require('crypto');
@@ -383,46 +383,46 @@ app.post('/api/contract/create', async (req, res) => {
     if (error) throw error;
  
     const signUrl = `https://ssakapp.co.kr/sign.html?token=${token}`;
-    const msg = `[${companyName||'서프로클린'}] 계약서 서명 요청\n\n${customerName||'고객'}님, 아래 링크에서 계약서 내용을 확인하고 서명해 주세요.\n\n${signUrl}\n\n링크는 7일간 유효합니다.\n\n문의: ${companyPhone||''}`;
+    const msg = `[${companyName||'ìíë¡í´ë¦°'}] ê³ì½ì ìëª ìì²­\n\n${customerName||'ê³ ê°'}ë, ìë ë§í¬ìì ê³ì½ì ë´ì©ì íì¸íê³  ìëªí´ ì£¼ì¸ì.\n\n${signUrl}\n\në§í¬ë 7ì¼ê° ì í¨í©ëë¤.\n\në¬¸ì: ${companyPhone||''}`;
  
-    await sendSMSUtil(customerPhone.replace(/-/g,''), msg, `[${companyName||'서프로클린'}] 계약서`);
+    await sendSMSUtil(customerPhone.replace(/-/g,''), msg, `[${companyName||'ìíë¡í´ë¦°'}] ê³ì½ì`);
  
-    console.log(`계약서 생성: ${token}`);
+    console.log(`ê³ì½ì ìì±: ${token}`);
     res.json({ success: true, token, signUrl });
   } catch (err) {
-    console.error('계약서 생성 오류:', err);
-    res.status(500).json({ error: '서버 오류: ' + err.message });
+    console.error('ê³ì½ì ìì± ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
   }
 });
  
-// ── 비대면 계약서: 고객 조회 ─────────────────────────
+// ââ ë¹ëë©´ ê³ì½ì: ê³ ê° ì¡°í âââââââââââââââââââââââââ
 app.get('/api/contract/:token', async (req, res) => {
   const { token } = req.params;
   try {
     const { data, error } = await supabase.from('pending_contracts').select('*').eq('token', token).single();
-    if (error || !data) return res.status(404).json({ error: '계약서를 찾을 수 없습니다' });
-    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: '만료된 계약서입니다' });
+    if (error || !data) return res.status(404).json({ error: 'ê³ì½ìë¥¼ ì°¾ì ì ììµëë¤' });
+    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: 'ë§ë£ë ê³ì½ììëë¤' });
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ error: '서버 오류' });
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// ── 비대면 계약서: 고객 서명 완료 & PDF 생성 ────────────
+// ââ ë¹ëë©´ ê³ì½ì: ê³ ê° ìëª ìë£ & PDF ìì± ââââââââââââ
 app.post('/api/contract/:token/sign', async (req, res) => {
   const { token } = req.params;
   const { customerSignature, pdfBase64 } = req.body;
-  if (!customerSignature) return res.status(400).json({ error: '서명이 없습니다' });
+  if (!customerSignature) return res.status(400).json({ error: 'ìëªì´ ììµëë¤' });
  
   try {
     const { data: contract, error } = await supabase.from('pending_contracts').select('*').eq('token', token).single();
-    if (error || !contract) return res.status(404).json({ error: '계약서를 찾을 수 없습니다' });
-    if (contract.status === 'completed') return res.status(400).json({ error: '이미 서명된 계약서입니다' });
+    if (error || !contract) return res.status(404).json({ error: 'ê³ì½ìë¥¼ ì°¾ì ì ììµëë¤' });
+    if (contract.status === 'completed') return res.status(400).json({ error: 'ì´ë¯¸ ìëªë ê³ì½ììëë¤' });
  
     const cd = contract.contract_data;
     let pdfUrl = null;
  
-    // PDF 업로드
+    // PDF ìë¡ë
     if (pdfBase64) {
       const pdfBuffer = Buffer.from(pdfBase64, 'base64');
       const fileName = `${Date.now()}_${token.slice(0,8)}.pdf`;
@@ -434,130 +434,129 @@ app.post('/api/contract/:token/sign', async (req, res) => {
       }
     }
  
-    // 상태 업데이트
+    // ìí ìë°ì´í¸
     await supabase.from('pending_contracts').update({
       customer_signature: customerSignature,
       status: 'completed',
       pdf_url: pdfUrl
     }).eq('token', token);
  
-    // 양측 SMS 발송
-    const companyName = cd.companyName || '서프로클린';
+    // ìì¸¡ SMS ë°ì¡
+    const companyName = cd.companyName || 'ìíë¡í´ë¦°';
     const companyPhone = cd.companyPhone || '';
-    const customerName = cd.name || '고객';
+    const customerName = cd.name || 'ê³ ê°';
     const customerPhone = cd.phone || '';
-    const linkMsg = pdfUrl ? `\n\n계약서 PDF: ${pdfUrl}` : '';
+    const linkMsg = pdfUrl ? `\n\nê³ì½ì PDF: ${pdfUrl}` : '';
  
-    const customerMsg = `[${companyName}] 계약서 서명 완료!\n${customerName}님의 서명이 완료되었습니다.${linkMsg}\n\n문의: ${companyPhone}`;
-    const ownerMsg = `[계약서 서명 완료]\n고객: ${customerName}님 (${customerPhone})\n서명이 완료되었습니다.${linkMsg}`;
+    const customerMsg = `[${companyName}] ê³ì½ì ìëª ìë£!\n${customerName}ëì ìëªì´ ìë£ëììµëë¤.${linkMsg}\n\në¬¸ì: ${companyPhone}`;
+    const ownerMsg = `[ê³ì½ì ìëª ìë£]\nê³ ê°: ${customerName}ë (${customerPhone})\nìëªì´ ìë£ëììµëë¤.${linkMsg}`;
  
-    if (customerPhone) await sendSMSUtil(customerPhone.replace(/-/g,''), customerMsg, `[${companyName}] 서명 완료`);
-    if (companyPhone) await sendSMSUtil(companyPhone.replace(/-/g,''), ownerMsg, '계약서 서명 완료');
+    if (customerPhone) await sendSMSUtil(customerPhone.replace(/-/g,''), customerMsg, `[${companyName}] ìëª ìë£`);
+    if (companyPhone) await sendSMSUtil(companyPhone.replace(/-/g,''), ownerMsg, 'ê³ì½ì ìëª ìë£');
  
-    console.log(`계약서 서명 완료: ${token}`);
+    console.log(`ê³ì½ì ìëª ìë£: ${token}`);
     res.json({ success: true, pdfUrl });
   } catch (err) {
-    console.error('서명 완료 오류:', err);
-    res.status(500).json({ error: '서버 오류: ' + err.message });
+    console.error('ìëª ìë£ ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
   }
 });
  
-// ── 예약 신청 접수 ─────────────────────────────────────────────────────────
+// ââ ìì½ ì ì²­ ì ì âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 app.post('/api/booking', async (req, res) => {
-  const { name, phone, address, size, type, date, time, notes, price, companyName } = req.body;
- 
-  if (!name || !phone || !address) {
-    return res.status(400).json({ error: '이름, 연락처, 주소는 필수입니다' });
-  }
- 
-  const typeLabels = { 'move-in':'입주 전', 'move-out':'이사 후', 'new':'신축 준공', 'life':'생활 청소' };
- 
   try {
-    // Supabase bookings 테이블에 저장
-    const { data: booking, error } = await supabase
+    const { name, phone, address, size, type, date, time, notes, price, companyName } = req.body;
+    if (!name || !phone || !address) {
+      return res.status(400).json({ error: '이름, 연락처, 주소는 필수입니다.' });
+    }
+    const { data, error } = await supabase
       .from('bookings')
       .insert([{
         name,
         phone: phone.replace(/-/g, ''),
         address,
         size: size ? parseInt(size) : null,
-        type: type || 'move-in',
-        preferred_date: date || null,
-        preferred_time: time || null,
+        type: type || '입주 전 청소',
+        date: date || null,
+        time: time || null,
         notes: notes || null,
-        price: price ? parseInt(price) : null,
-        company_name: companyName || '서프로클린',
+        price: price || null,
+        company_name: companyName || null,
         status: 'pending',
+        created_at: new Date().toISOString()
       }])
       .select()
       .single();
- 
     if (error) throw error;
- 
-    // 사장님에게 SMS 알림 발송
-    const ownerPhone = process.env.COOLSMS_FROM; // 알림 수신 번호 (발신번호 재사용)
-    const typeLabel  = typeLabels[type] || type || '입주 전';
-    const ownerMsg   =
-      `안녕하세요! 새 예약이 접수됐어요.\n\n` +
-      `고객: ${name} (${phone})\n` +
-      `주소: ${address}\n` +
-      `유형: ${size ? size + '평 ' : ''}${typeLabel}\n` +
-      (date ? `희망일: ${date}${time ? ' ' + time : ''}\n` : '') +
-      (price ? `견적: ${parseInt(price).toLocaleString()}원\n` : '') +
-      (notes ? `요청: ${notes}\n` : '') +
-      `\n싹싹 앱에서 확인하세요 🧹`;
- 
-    if (ownerPhone) {
-      await sendSMSUtil(ownerPhone.replace(/-/g, ''), ownerMsg, '새 예약 접수');
+
+    // SMS 알림 (실패해도 예약 등록은 성공 처리)
+    try {
+      const ownerPhone = process.env.OWNER_PHONE;
+      const apiKey = process.env.COOLSMS_API_KEY;
+      const apiSecret = process.env.COOLSMS_API_SECRET;
+      const fromPhone = process.env.FROM_PHONE;
+      if (ownerPhone && apiKey && apiSecret && fromPhone) {
+        const crypto = require('crypto');
+        const timestamp = new Date().toISOString().replace(/[^0-9]/g,'').slice(0,14);
+        const salt = Math.random().toString(36).substr(2,16);
+        const signature = crypto.createHmac('sha256', apiSecret).update(timestamp+salt).digest('hex');
+        const msg = `[싹싹] 새 예약신청!\n${name}(${phone})\n${date} ${time}\n${type} ${size}평\n${address}`;
+        await fetch('https://api.coolsms.co.kr/messages/v4/send', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`HMAC-SHA256 apiKey=${apiKey}, date=${timestamp}, salt=${salt}, signature=${signature}`},
+          body: JSON.stringify({message:{to:ownerPhone,from:fromPhone,text:msg}})
+        });
+      }
+    } catch(smsErr) {
+      console.log('SMS 알림 실패(무시):', smsErr.message);
     }
- 
-    // 고객에게 접수 확인 SMS 발송
-    const customerMsg =
-      `안녕하세요, ${name}님!\n${companyName || '서프로클린'} 입주청소입니다.\n\n` +
-      `예약 신청이 접수됐어요.\n` +
-      `담당자가 확인 후 빠르게 연락드리겠습니다 😊\n\n` +
-      (date ? `희망일: ${date}${time ? ' ' + time : ''}\n` : '') +
-      `문의: ${process.env.COOLSMS_FROM || ''}`;
- 
-    await sendSMSUtil(phone.replace(/-/g, ''), customerMsg, `[${companyName || '서프로클린'}] 예약접수`);
- 
-    console.log(`예약 접수: ${name} (${phone})`);
-    res.json({ success: true, bookingId: booking.id });
- 
+
+    res.json({ success: true, data });
   } catch (err) {
     console.error('예약 접수 오류:', err);
     res.status(500).json({ error: '서버 오류: ' + err.message });
   }
 });
- 
-// ── 예약 목록 조회 (사장님용) ───────────────────────────────────────────────
+
 app.get('/api/bookings', async (req, res) => {
-  const adminKey = req.headers['x-admin-key'];
-  if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: '인증 실패' });
-  }
- 
   try {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100);
- 
+    // x-admin-key 헤더 또는 adminKey 쿼리 파라미터 모두 허용
+    const adminKey = req.headers['x-admin-key'] || req.query.adminKey;
+    if (adminKey !== process.env.ADMIN_KEY) {
+      return res.status(401).json({ error: '인증 실패' });
+    }
+    const { status } = req.query;
+    let query = supabase.from('bookings').select('*').order('created_at', { ascending: false });
+    if (status) query = query.eq('status', status);
+    const { data, error } = await query;
     if (error) throw error;
-    res.json({ success: true, count: data.length, data });
- 
+    res.json({ success: true, data });
   } catch (err) {
-    console.error('예약 조회 오류:', err);
-    res.status(500).json({ error: '서버 오류' });
+    res.status(500).json({ error: err.message });
   }
 });
- 
-// ── 예약 상태 변경 (사장님용) ───────────────────────────────────────────────
+
+app.put('/api/bookings/:id/status', async (req, res) => {
+  try {
+    const adminKey = req.headers['x-admin-key'] || req.query.adminKey;
+    if (adminKey !== process.env.ADMIN_KEY) {
+      return res.status(401).json({ error: '인증 실패' });
+    }
+    const { id } = req.params;
+    const { status } = req.body;
+    const { data, error } = await supabase
+      .from('bookings').update({ status }).eq('id', id).select().single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.put('/api/bookings/:id/status', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: '인증 실패' });
+    return res.status(401).json({ error: 'ì¸ì¦ ì¤í¨' });
   }
  
   const { id } = req.params;
@@ -575,35 +574,35 @@ app.put('/api/bookings/:id/status', async (req, res) => {
     res.json({ success: true, data });
  
   } catch (err) {
-    res.status(500).json({ error: '서버 오류' });
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
  
-// ── 예약링크 토큰 생성 (URL 단축용) ───────────────────────────────────────
-// 견적 데이터를 서버에 저장 → 짧은 토큰 반환 → booking.html?t={token}
+// ââ ìì½ë§í¬ í í° ìì± (URL ë¨ì¶ì©) âââââââââââââââââââââââââââââââââââââââ
+// ê²¬ì  ë°ì´í°ë¥¼ ìë²ì ì ì¥ â ì§§ì í í° ë°í â booking.html?t={token}
 app.post('/api/booking/token', async (req, res) => {
   const { name, phone, size, type, price, companyName } = req.body;
   try {
     const crypto = require('crypto');
-    const token = crypto.randomBytes(6).toString('hex'); // 12자리 짧은 토큰
+    const token = crypto.randomBytes(6).toString('hex'); // 12ìë¦¬ ì§§ì í í°
  
     const { error } = await supabase.from('booking_tokens').insert([{
       token,
       quote_data: { name, phone, size, type, price, companyName },
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7일 유효
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7ì¼ ì í¨
     }]);
     if (error) throw error;
  
     const finalUrl = `https://ssakapp.co.kr/booking.html?t=${token}`;
     res.json({ success: true, url: finalUrl, token });
   } catch (err) {
-    console.error('토큰 생성 오류:', err);
-    res.status(500).json({ error: '서버 오류: ' + err.message });
+    console.error('í í° ìì± ì¤ë¥:', err);
+    res.status(500).json({ error: 'ìë² ì¤ë¥: ' + err.message });
   }
 });
  
-// ── 예약링크 토큰 조회 ──────────────────────────────────────────────────────
+// ââ ìì½ë§í¬ í í° ì¡°í ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 app.get('/api/booking/token/:token', async (req, res) => {
   const { token } = req.params;
   try {
@@ -613,19 +612,19 @@ app.get('/api/booking/token/:token', async (req, res) => {
       .eq('token', token)
       .single();
  
-    if (error || !data) return res.status(404).json({ error: '유효하지 않은 링크입니다' });
-    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: '만료된 링크입니다 (7일 초과)' });
+    if (error || !data) return res.status(404).json({ error: 'ì í¨íì§ ìì ë§í¬ìëë¤' });
+    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: 'ë§ë£ë ë§í¬ìëë¤ (7ì¼ ì´ê³¼)' });
  
     res.json({ success: true, data: data.quote_data });
   } catch (err) {
-    res.status(500).json({ error: '서버 오류' });
+    res.status(500).json({ error: 'ìë² ì¤ë¥' });
   }
 });
  
-// 서버 시작
+// ìë² ìì
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ 싹싹 서버 실행 중 - 포트 ${PORT}`);
-  console.log(`🧹 싹싹 입주청소 전문인 플랫폼`);
+  console.log(`â ì¹ì¹ ìë² ì¤í ì¤ - í¬í¸ ${PORT}`);
+  console.log(`ð§¹ ì¹ì¹ ìì£¼ì²­ì ì ë¬¸ì¸ íë«í¼`);
 });
  
