@@ -787,13 +787,15 @@ function makeNickname(anonId) {
 // ── GET /api/community/posts ──────────────────────────────────────
 app.get('/api/community/posts', async (req, res) => {
   try {
-    const { category, page = 0, limit = 20 } = req.query;
+    const { page = 0, limit = 20, search } = req.query;
     let q = supabase.from('community_posts')
-      .select('id,category,content,anon_id,like_count,comment_count,created_at')
+      .select('id,content,anon_id,like_count,comment_count,created_at')
       .eq('deleted', false)
       .order('created_at', { ascending: false })
-      .range(page*limit, page*limit+limit-1);
-    if (category && category !== 'all') q = q.eq('category', category);
+      .range(page*limit, (page*1+1)*limit-1);
+    if (search && search.trim()) {
+      q = q.ilike('content', '%' + search.trim() + '%');
+    }
     const { data, error } = await q;
     if (error) throw error;
     const posts = (data||[]).map(p => ({
@@ -808,12 +810,12 @@ app.get('/api/community/posts', async (req, res) => {
 // ── POST /api/community/posts ─────────────────────────────────────
 app.post('/api/community/posts', async (req, res) => {
   try {
-    const { anon_id, category, content, title } = req.body;
+    const { anon_id, content } = req.body;
     if (!anon_id || !content) return res.status(400).json({ error: '필수 항목 누락' });
     if (content.length > 2000) return res.status(400).json({ error: '내용이 너무 깁니다 (최대 2000자)' });
     const { data, error } = await supabase.from('community_posts').insert([{
-      anon_id, category: category || '자유', content,
-      title: title || null, like_count: 0, comment_count: 0, deleted: false
+      anon_id, category: '자유', content,
+      like_count: 0, comment_count: 0, deleted: false
     }]).select().single();
     if (error) throw error;
     res.json({ success: true, data: { ...data, nickname: makeNickname(data.anon_id), anon_id: undefined } });
@@ -1704,13 +1706,15 @@ function makeNickname(anonId) {
 // ── GET /api/community/posts ──────────────────────────────────────
 app.get('/api/community/posts', async (req, res) => {
   try {
-    const { category, page = 0, limit = 20 } = req.query;
+    const { page = 0, limit = 20, search } = req.query;
     let q = supabase.from('community_posts')
-      .select('id,category,content,anon_id,like_count,comment_count,created_at')
+      .select('id,content,anon_id,like_count,comment_count,created_at')
       .eq('deleted', false)
       .order('created_at', { ascending: false })
-      .range(page*limit, page*limit+limit-1);
-    if (category && category !== 'all') q = q.eq('category', category);
+      .range(page*limit, (page*1+1)*limit-1);
+    if (search && search.trim()) {
+      q = q.ilike('content', '%' + search.trim() + '%');
+    }
     const { data, error } = await q;
     if (error) throw error;
     const posts = (data||[]).map(p => ({
@@ -1725,12 +1729,12 @@ app.get('/api/community/posts', async (req, res) => {
 // ── POST /api/community/posts ─────────────────────────────────────
 app.post('/api/community/posts', async (req, res) => {
   try {
-    const { anon_id, category, content, title } = req.body;
+    const { anon_id, content } = req.body;
     if (!anon_id || !content) return res.status(400).json({ error: '필수 항목 누락' });
     if (content.length > 2000) return res.status(400).json({ error: '내용이 너무 깁니다 (최대 2000자)' });
     const { data, error } = await supabase.from('community_posts').insert([{
-      anon_id, category: category || '자유', content,
-      title: title || null, like_count: 0, comment_count: 0, deleted: false
+      anon_id, category: '자유', content,
+      like_count: 0, comment_count: 0, deleted: false
     }]).select().single();
     if (error) throw error;
     res.json({ success: true, data: { ...data, nickname: makeNickname(data.anon_id), anon_id: undefined } });
