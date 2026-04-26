@@ -934,89 +934,96 @@ app.post('/api/admin/migrate-community', async (req, res) => {
     return res.status(403).json({ error: '인증 실패' });
   }
 
-  const SUPA_URL = process.env.SUPABASE_URL;
-  const SUPA_KEY = process.env.SUPABASE_SERVICE_KEY;
   const results = [];
 
-  // Supabase Management API를 통한 SQL 직접 실행
-  const sqls = [
-    `CREATE TABLE IF NOT EXISTS community_posts (
-      id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      anon_id       TEXT NOT NULL,
-      category      TEXT NOT NULL DEFAULT '자유',
-      title         TEXT,
-      content       TEXT NOT NULL,
-      like_count    INT  NOT NULL DEFAULT 0,
-      comment_count INT  NOT NULL DEFAULT 0,
-      deleted       BOOLEAN NOT NULL DEFAULT false,
-      created_at    TIMESTAMPTZ DEFAULT now()
-    )`,
-    `CREATE TABLE IF NOT EXISTS community_comments (
-      id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      post_id    UUID NOT NULL,
-      anon_id    TEXT NOT NULL,
-      content    TEXT NOT NULL,
-      deleted    BOOLEAN NOT NULL DEFAULT false,
-      created_at TIMESTAMPTZ DEFAULT now()
-    )`,
-    `CREATE TABLE IF NOT EXISTS community_likes (
-      id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      post_id    UUID NOT NULL,
-      anon_id    TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT now(),
-      CONSTRAINT community_likes_unique UNIQUE(post_id, anon_id)
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_comm_posts_created ON community_posts(created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_comm_posts_cat ON community_posts(category)`,
-    `CREATE INDEX IF NOT EXISTS idx_comm_comments_post ON community_comments(post_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_comm_likes_post ON community_likes(post_id)`,
-  ];
-
-  for (const sql of sqls) {
+  // 방법 1: DATABASE_URL (pg 직접 연결)
+  const dbUrl = process.env.DATABASE_URL;
+  if (dbUrl) {
+    const { Pool } = require('pg');
+    const pool = new Pool({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
+    const client = await pool.connect();
+    const sqls = [
+      `CREATE TABLE IF NOT EXISTS community_posts (id UUID DEFAULT gen_random_uuid() PRIMARY KEY, anon_id TEXT NOT NULL, category TEXT NOT NULL DEFAULT '일반', title TEXT, content TEXT NOT NULL, image_url TEXT, like_count INT NOT NULL DEFAULT 0, comment_count INT NOT NULL DEFAULT 0, deleted BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`,
+      `CREATE TABLE IF NOT EXISTS community_comments (id UUID DEFAULT gen_random_uuid() PRIMARY KEY, post_id UUID NOT NULL, anon_id TEXT NOT NULL, content TEXT NOT NULL, deleted BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`,
+      `CREATE TABLE IF NOT EXISTS community_likes (id UUID DEFAULT gen_random_uuid() PRIMARY KEY, post_id UUID NOT NULL, anon_id TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now(), CONSTRAINT community_likes_unique UNIQUE(post_id, anon_id))`,
+      `ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS title TEXT`,
+      `ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS image_url TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_comm_posts_created ON community_posts(created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_comm_comments_post ON community_comments(post_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_comm_likes_post ON community_likes(post_id)`,
+      `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN NULL; END IF; END $$`,
+    ];
     try {
-      // Supabase REST API: /rest/v1/sql 엔드포인트 (v2 지원)
-      const r1 = await fetch(SUPA_URL + '/rest/v1/sql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPA_KEY,
-          'Authorization': 'Bearer ' + SUPA_KEY,
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify({ query: sql })
-      });
-      if (r1.ok) {
-        results.push({ sql: sql.slice(0,50).trim(), status: 'ok_v2' });
-        continue;
+      for (const sql of sqls) {
+        await client.query(sql);
+        results.push({ sql: sql.slice(0,60).trim(), ok: true });
+        console.log('[migrate] OK:', sql.slice(0,60).trim());
       }
-
-      // 대안: Supabase pg/query 엔드포인트
-      const r2 = await fetch(SUPA_URL.replace('.supabase.co', '.supabase.co') + '/pg/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPA_KEY,
-          'Authorization': 'Bearer ' + SUPA_KEY
-        },
-        body: JSON.stringify({ query: sql })
-      });
-      const t2 = await r2.text();
-      results.push({ sql: sql.slice(0,50).trim(), status: r2.status, body: t2.slice(0,80) });
     } catch(e) {
-      results.push({ sql: sql.slice(0,50).trim(), error: e.message });
+      results.push({ error: e.message });
+      console.log('[migrate] 오류:', e.message);
+    } finally { client.release(); await pool.end(); }
+
+    // 검증
+    try {
+      const { data, error } = await supabase.from('community_posts').select('id').limit(1);
+      return res.json({ success: !error, method: 'pg_direct', results, verified: !error, verifyError: error?.message });
+    } catch(e2) {
+      return res.json({ success: false, method: 'pg_direct', results, error: e2.message });
     }
   }
 
-  // 결과 확인: community_posts 테이블 조회 시도
-  let verifyOk = false;
+  // 방법 2: DATABASE_URL 없을 때 - SUPABASE_URL에서 project ref 추출 후 시도
+  const supaUrl = process.env.SUPABASE_URL || '';
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY || '';
+  const ref = supaUrl.match(/https:\/\/([a-z]+)\.supabase\.co/)?.[1];
+
+  if (!ref || !serviceKey) {
+    return res.json({ success: false, error: 'DATABASE_URL 또는 SUPABASE_URL 환경변수가 필요합니다', hint: 'Railway Variables에서 DATABASE_URL을 추가해주세요. Supabase Dashboard > Project Settings > Database > Connection string (URI)' });
+  }
+
+  // Supabase pg-meta API (내부 API, service key로 시도)
+  const endpoints = [
+    `https://${ref}.supabase.co/pg/query`,
+    `https://api.supabase.com/v1/projects/${ref}/database/query`,
+  ];
+
+  const sqls2 = [
+    `CREATE TABLE IF NOT EXISTS community_posts (id UUID DEFAULT gen_random_uuid() PRIMARY KEY, anon_id TEXT NOT NULL, category TEXT NOT NULL DEFAULT '일반', title TEXT, content TEXT NOT NULL, image_url TEXT, like_count INT NOT NULL DEFAULT 0, comment_count INT NOT NULL DEFAULT 0, deleted BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`,
+    `CREATE TABLE IF NOT EXISTS community_comments (id UUID DEFAULT gen_random_uuid() PRIMARY KEY, post_id UUID NOT NULL, anon_id TEXT NOT NULL, content TEXT NOT NULL, deleted BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`,
+    `CREATE TABLE IF NOT EXISTS community_likes (id UUID DEFAULT gen_random_uuid() PRIMARY KEY, post_id UUID NOT NULL, anon_id TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now(), CONSTRAINT community_likes_unique UNIQUE(post_id, anon_id))`,
+    `ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS title TEXT`,
+    `ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS image_url TEXT`,
+  ];
+
+  for (const endpoint of endpoints) {
+    const endpointResults = [];
+    let allOk = true;
+    for (const sql of sqls2) {
+      try {
+        const r = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', 'apikey': serviceKey, 'Authorization': 'Bearer '+serviceKey },
+          body: JSON.stringify({ query: sql })
+        });
+        const body = await r.text();
+        endpointResults.push({ sql: sql.slice(0,50), status: r.status, body: body.slice(0,100) });
+        if (!r.ok) allOk = false;
+      } catch(e) { endpointResults.push({ error: e.message }); allOk = false; }
+    }
+    results.push({ endpoint, results: endpointResults, allOk });
+    if (allOk) break;
+  }
+
+  // 최종 검증
   try {
     const { data, error } = await supabase.from('community_posts').select('id').limit(1);
-    verifyOk = !error;
-  } catch(e) {}
-
-  res.json({ success: verifyOk, results, verified: verifyOk,
-    message: verifyOk ? '✅ community_posts 테이블 생성/확인 완료!' : '⚠️ 테이블 생성 후 확인 필요' });
+    res.json({ success: !error, method: 'rest_api', results, verified: !error, verifyError: error?.message });
+  } catch(e) {
+    res.json({ success: false, method: 'rest_api', results, error: e.message });
+  }
 });
+
 
 nst express = require('express');
 const cors = require('cors');
