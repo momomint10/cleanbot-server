@@ -684,6 +684,145 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
 });
 
+
+// ════════════════════════════════════════════════════════════════════
+// 커뮤니티 API (익명 블라인드 스타일)
+// ════════════════════════════════════════════════════════════════════
+
+// ── 유틸: 닉네임 생성 ────────────────────────────────────────────
+function makeNickname(anonId) {
+  const adj = ['씩씩한','열정적인','꼼꼼한','친절한','베테랑','신중한','활발한','성실한','노련한','센스있는'];
+  const noun = ['청소왕','사장님','대표님','전문가','매니저','고수','달인','마스터','파트너','장인'];
+  const h = [...anonId].reduce((a,c)=>a+c.charCodeAt(0),0);
+  return adj[h%adj.length] + ' ' + noun[(h>>3)%noun.length];
+}
+
+// ── GET /api/community/posts ──────────────────────────────────────
+app.get('/api/community/posts', async (req, res) => {
+  try {
+    const { category, page = 0, limit = 20 } = req.query;
+    let q = supabase.from('community_posts')
+      .select('id,category,content,anon_id,like_count,comment_count,created_at')
+      .eq('deleted', false)
+      .order('created_at', { ascending: false })
+      .range(page*limit, page*limit+limit-1);
+    if (category && category !== 'all') q = q.eq('category', category);
+    const { data, error } = await q;
+    if (error) throw error;
+    const posts = (data||[]).map(p => ({
+      ...p,
+      nickname: makeNickname(p.anon_id),
+      anon_id: undefined
+    }));
+    res.json({ success: true, data: posts });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/community/posts ─────────────────────────────────────
+app.post('/api/community/posts', async (req, res) => {
+  try {
+    const { anon_id, category, content, title } = req.body;
+    if (!anon_id || !content) return res.status(400).json({ error: '필수 항목 누락' });
+    if (content.length > 2000) return res.status(400).json({ error: '내용이 너무 깁니다 (최대 2000자)' });
+    const { data, error } = await supabase.from('community_posts').insert([{
+      anon_id, category: category || '자유', content,
+      title: title || null, like_count: 0, comment_count: 0, deleted: false
+    }]).select().single();
+    if (error) throw error;
+    res.json({ success: true, data: { ...data, nickname: makeNickname(data.anon_id), anon_id: undefined } });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/community/posts/:id ──────────────────────────────────
+app.get('/api/community/posts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id } = req.query;
+    const [{ data: post, error: e1 }, { data: comments, error: e2 }, { data: liked }] = await Promise.all([
+      supabase.from('community_posts').select('*').eq('id', id).eq('deleted', false).single(),
+      supabase.from('community_comments').select('id,content,anon_id,created_at').eq('post_id', id).eq('deleted', false).order('created_at'),
+      anon_id ? supabase.from('community_likes').select('id').eq('post_id', id).eq('anon_id', anon_id).maybeSingle() : { data: null }
+    ]);
+    if (e1) throw e1;
+    res.json({
+      success: true,
+      data: { ...post, nickname: makeNickname(post.anon_id), anon_id: undefined,
+        is_mine: post.anon_id === anon_id, liked: !!liked },
+      comments: (comments||[]).map(c => ({
+        ...c, nickname: makeNickname(c.anon_id), anon_id: undefined,
+        is_mine: c.anon_id === anon_id
+      }))
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/community/posts/:id ──────────────────────────────
+app.delete('/api/community/posts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id } = req.body;
+    const { data: post } = await supabase.from('community_posts').select('anon_id').eq('id', id).single();
+    if (!post || post.anon_id !== anon_id) return res.status(403).json({ error: '삭제 권한 없음' });
+    await supabase.from('community_posts').update({ deleted: true }).eq('id', id);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/community/posts/:id/like ───────────────────────────
+app.post('/api/community/posts/:id/like', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id } = req.body;
+    if (!anon_id) return res.status(400).json({ error: 'anon_id 필요' });
+    const { data: existing } = await supabase.from('community_likes')
+      .select('id').eq('post_id', id).eq('anon_id', anon_id).maybeSingle();
+    if (existing) {
+      await supabase.from('community_likes').delete().eq('id', existing.id);
+      await supabase.rpc('decrement_like', { post_id: id }).catch(async () => {
+        const { data: p } = await supabase.from('community_posts').select('like_count').eq('id',id).single();
+        await supabase.from('community_posts').update({ like_count: Math.max(0,(p?.like_count||1)-1) }).eq('id',id);
+      });
+      res.json({ success: true, liked: false });
+    } else {
+      await supabase.from('community_likes').insert([{ post_id: id, anon_id }]);
+      const { data: p } = await supabase.from('community_posts').select('like_count').eq('id',id).single();
+      await supabase.from('community_posts').update({ like_count: (p?.like_count||0)+1 }).eq('id',id);
+      res.json({ success: true, liked: true });
+    }
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/community/posts/:id/comments ────────────────────────
+app.post('/api/community/posts/:id/comments', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id, content } = req.body;
+    if (!anon_id || !content) return res.status(400).json({ error: '필수 항목 누락' });
+    if (content.length > 500) return res.status(400).json({ error: '댓글이 너무 깁니다 (최대 500자)' });
+    const { data, error } = await supabase.from('community_comments')
+      .insert([{ post_id: id, anon_id, content, deleted: false }]).select().single();
+    if (error) throw error;
+    // comment_count 업데이트
+    const { data: p } = await supabase.from('community_posts').select('comment_count').eq('id',id).single();
+    await supabase.from('community_posts').update({ comment_count: (p?.comment_count||0)+1 }).eq('id',id);
+    res.json({ success: true, data: { ...data, nickname: makeNickname(data.anon_id), anon_id: undefined } });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/community/comments/:id ───────────────────────────
+app.delete('/api/community/comments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id } = req.body;
+    const { data: c } = await supabase.from('community_comments').select('anon_id,post_id').eq('id', id).single();
+    if (!c || c.anon_id !== anon_id) return res.status(403).json({ error: '삭제 권한 없음' });
+    await supabase.from('community_comments').update({ deleted: true }).eq('id', id);
+    const { data: p } = await supabase.from('community_posts').select('comment_count').eq('id',c.post_id).single();
+    await supabase.from('community_posts').update({ comment_count: Math.max(0,(p?.comment_count||1)-1) }).eq('id',c.post_id);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.listen(PORT, () => {
   console.log(`ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ - ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ ${PORT}`);
   console.log(`ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ§ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ£ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¼ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¼`);
