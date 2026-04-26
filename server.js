@@ -393,7 +393,7 @@ app.post('/api/contract/create', async (req, res) => {
   try {
     const signUrl = 'https://ssakapp.co.kr/sign.html?token=' + contract.token;
     const smsMsg = '[' + (contract.company_name || '싹싹클린') + '] ' + contract.customer_name + ' 고객님, 계약서 서명 링크:\n' + signUrl;
-    await sendSMS(contract.customer_phone, smsMsg);
+    await sendSMSUtil(contract.customer_phone, smsMsg);
   } catch(smsErr) { console.log('SMS send error:', smsErr.message); }
 
   res.json({ success: true, token, signUrl });
@@ -467,8 +467,8 @@ app.post('/api/contract/:token/sign', async (req, res) => {
   // 양측에 완료 SMS 발송
   try {
     const doneMsg = '[싹싹클린] 계약서 서명이 완료되었습니다. 감사합니다.';
-    if (contract.customer_phone) await sendSMS(contract.customer_phone, doneMsg);
-    if (contract.owner_phone) await sendSMS(contract.owner_phone, '[싹싹클린] ' + contract.customer_name + ' 고객 계약서 서명 완료!');
+    if (contract.customer_phone) await sendSMSUtil(contract.customer_phone, doneMsg);
+    if (contract.owner_phone) await sendSMSUtil(contract.owner_phone, '[싹싹클린] ' + contract.customer_name + ' 고객 계약서 서명 완료!');
   } catch(smsErr2) { console.log('SMS done error:', smsErr2.message); }
 
   res.json({ success: true, pdfUrl });
