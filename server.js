@@ -12,91 +12,81 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
-// ── 서버 시작 시 커뮤니티 테이블 자동 생성 ──────────────────────────
+// ── 서버 시작 시 커뮤니티 테이블 자동 생성 (pg 직접 연결) ───────────────
 async function autoMigrateCommunityTables() {
-  const tables = [
-    {
-      name: 'community_posts',
-      sql: `CREATE TABLE IF NOT EXISTS community_posts (
-        id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-        anon_id       TEXT NOT NULL,
-        category      TEXT NOT NULL DEFAULT '자유',
-        title         TEXT,
-        content       TEXT NOT NULL,
-        like_count    INT  NOT NULL DEFAULT 0,
-        comment_count INT  NOT NULL DEFAULT 0,
-        deleted       BOOLEAN NOT NULL DEFAULT false,
-        created_at    TIMESTAMPTZ DEFAULT now()
-      )`
-    },
-    {
-      name: 'community_comments',
-      sql: `CREATE TABLE IF NOT EXISTS community_comments (
-        id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-        post_id    UUID NOT NULL,
-        anon_id    TEXT NOT NULL,
-        content    TEXT NOT NULL,
-        deleted    BOOLEAN NOT NULL DEFAULT false,
-        created_at TIMESTAMPTZ DEFAULT now()
-      )`
-    },
-    {
-      name: 'community_likes',
-      sql: `CREATE TABLE IF NOT EXISTS community_likes (
-        id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-        post_id    UUID NOT NULL,
-        anon_id    TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT now(),
-        CONSTRAINT community_likes_unique UNIQUE(post_id, anon_id)
-      )`
-    }
+  // DATABASE_URL 환경변수 또는 Supabase URL에서 추출
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    console.log('[migrate] DATABASE_URL 없음 → supabase client 방식 시도');
+    // supabase client로 테이블 존재 확인만
+    try {
+      const { error } = await supabase.from('community_posts').select('id').limit(1);
+      if (!error) {
+        console.log('[migrate] community_posts 테이블 이미 존재 ✅');
+      } else {
+        console.log('[migrate] ⚠️  community_posts 테이블 없음. DATABASE_URL 환경변수를 Railway에 추가하거나 Supabase SQL Editor에서 community_tables.sql을 실행하세요.');
+        console.log('[migrate] 에러:', error.message);
+      }
+    } catch(e) { console.log('[migrate] 확인 오류:', e.message); }
+    return;
+  }
+
+  const { Pool } = require('pg');
+  const pool = new Pool({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
+
+  const sqls = [
+    `CREATE TABLE IF NOT EXISTS community_posts (
+      id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      anon_id       TEXT NOT NULL,
+      category      TEXT NOT NULL DEFAULT '일반',
+      title         TEXT,
+      content       TEXT NOT NULL,
+      image_url     TEXT,
+      like_count    INT  NOT NULL DEFAULT 0,
+      comment_count INT  NOT NULL DEFAULT 0,
+      deleted       BOOLEAN NOT NULL DEFAULT false,
+      created_at    TIMESTAMPTZ DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS community_comments (
+      id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      post_id    UUID NOT NULL,
+      anon_id    TEXT NOT NULL,
+      content    TEXT NOT NULL,
+      deleted    BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS community_likes (
+      id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      post_id    UUID NOT NULL,
+      anon_id    TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      CONSTRAINT community_likes_unique UNIQUE(post_id, anon_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_comm_posts_created ON community_posts(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_comm_comments_post ON community_comments(post_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_comm_likes_post ON community_likes(post_id)`,
+    // image_url 컬럼 추가 (기존 테이블에도 적용)
+    `ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS image_url TEXT`,
+    `ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS title TEXT`,
   ];
 
-  for (const t of tables) {
-    try {
-      // 테이블 존재 여부 확인
-      const { error: checkErr } = await supabase.from(t.name).select('id').limit(1);
-      if (!checkErr) {
-        console.log(`[migrate] ${t.name} 테이블 이미 존재`);
-        continue;
-      }
-      // 테이블 없으면 REST API로 SQL 실행
-      const SUPA_URL = process.env.SUPABASE_URL;
-      const SUPA_KEY = process.env.SUPABASE_SERVICE_KEY;
-      // Supabase v2 /sql 엔드포인트 시도
-      const r = await fetch(SUPA_URL + '/rest/v1/sql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPA_KEY,
-          'Authorization': 'Bearer ' + SUPA_KEY
-        },
-        body: JSON.stringify({ query: t.sql })
-      });
-      if (r.ok) {
-        console.log(`[migrate] ${t.name} 테이블 생성 완료`);
-      } else {
-        // 대안: Supabase pg/query 엔드포인트
-        const r2 = await fetch(SUPA_URL + '/pg/query', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPA_KEY,
-            'Authorization': 'Bearer ' + SUPA_KEY
-          },
-          body: JSON.stringify({ query: t.sql })
-        });
-        const body2 = await r2.text();
-        console.log(`[migrate] ${t.name}: ${r2.status} ${body2.slice(0,80)}`);
-      }
-    } catch(e) {
-      console.log(`[migrate] ${t.name} 오류:`, e.message);
+  const client = await pool.connect();
+  try {
+    for (const sql of sqls) {
+      await client.query(sql);
+      console.log('[migrate] OK:', sql.slice(0,60).trim());
     }
+    console.log('[migrate] ✅ 커뮤니티 테이블 마이그레이션 완료!');
+  } catch(e) {
+    console.log('[migrate] 오류:', e.message);
+  } finally {
+    client.release();
+    await pool.end();
   }
-  console.log('[migrate] 커뮤니티 테이블 마이그레이션 완료');
 }
 // 서버 시작 후 2초 뒤 실행 (Supabase 연결 안정화 후)
 setTimeout(autoMigrateCommunityTables, 2000);
+
 
 
  
@@ -789,7 +779,7 @@ app.get('/api/community/posts', async (req, res) => {
   try {
     const { page = 0, limit = 20, search } = req.query;
     let q = supabase.from('community_posts')
-      .select('id,content,anon_id,like_count,comment_count,created_at')
+      .select('id,title,content,image_url,anon_id,like_count,comment_count,created_at')
       .eq('deleted', false)
       .order('created_at', { ascending: false })
       .range(page*limit, (page*1+1)*limit-1);
@@ -810,11 +800,35 @@ app.get('/api/community/posts', async (req, res) => {
 // ── POST /api/community/posts ─────────────────────────────────────
 app.post('/api/community/posts', async (req, res) => {
   try {
-    const { anon_id, content } = req.body;
+    const { anon_id, content, title, imageBase64, imageMime } = req.body;
     if (!anon_id || !content) return res.status(400).json({ error: '필수 항목 누락' });
     if (content.length > 2000) return res.status(400).json({ error: '내용이 너무 깁니다 (최대 2000자)' });
+    if (title && title.length > 100) return res.status(400).json({ error: '제목이 너무 깁니다 (최대 100자)' });
+
+    // 이미지 업로드 처리
+    let image_url = null;
+    if (imageBase64) {
+      try {
+        const mime = imageMime || 'image/jpeg';
+        const ext = mime.split('/')[1] || 'jpg';
+        const fileName = `community/${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+        const buf = Buffer.from(imageBase64, 'base64');
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('ssak-contracts')
+          .upload(fileName, buf, { contentType: mime, upsert: false });
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from('ssak-contracts').getPublicUrl(fileName);
+          image_url = urlData.publicUrl;
+        } else {
+          console.log('이미지 업로드 오류:', uploadErr.message);
+        }
+      } catch(imgErr) {
+        console.log('이미지 처리 오류:', imgErr.message);
+      }
+    }
+
     const { data, error } = await supabase.from('community_posts').insert([{
-      anon_id, category: '자유', content,
+      anon_id, category: '일반', title: title || null, content, image_url,
       like_count: 0, comment_count: 0, deleted: false
     }]).select().single();
     if (error) throw error;
@@ -1708,7 +1722,7 @@ app.get('/api/community/posts', async (req, res) => {
   try {
     const { page = 0, limit = 20, search } = req.query;
     let q = supabase.from('community_posts')
-      .select('id,content,anon_id,like_count,comment_count,created_at')
+      .select('id,title,content,image_url,anon_id,like_count,comment_count,created_at')
       .eq('deleted', false)
       .order('created_at', { ascending: false })
       .range(page*limit, (page*1+1)*limit-1);
@@ -1729,11 +1743,35 @@ app.get('/api/community/posts', async (req, res) => {
 // ── POST /api/community/posts ─────────────────────────────────────
 app.post('/api/community/posts', async (req, res) => {
   try {
-    const { anon_id, content } = req.body;
+    const { anon_id, content, title, imageBase64, imageMime } = req.body;
     if (!anon_id || !content) return res.status(400).json({ error: '필수 항목 누락' });
     if (content.length > 2000) return res.status(400).json({ error: '내용이 너무 깁니다 (최대 2000자)' });
+    if (title && title.length > 100) return res.status(400).json({ error: '제목이 너무 깁니다 (최대 100자)' });
+
+    // 이미지 업로드 처리
+    let image_url = null;
+    if (imageBase64) {
+      try {
+        const mime = imageMime || 'image/jpeg';
+        const ext = mime.split('/')[1] || 'jpg';
+        const fileName = `community/${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+        const buf = Buffer.from(imageBase64, 'base64');
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('ssak-contracts')
+          .upload(fileName, buf, { contentType: mime, upsert: false });
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from('ssak-contracts').getPublicUrl(fileName);
+          image_url = urlData.publicUrl;
+        } else {
+          console.log('이미지 업로드 오류:', uploadErr.message);
+        }
+      } catch(imgErr) {
+        console.log('이미지 처리 오류:', imgErr.message);
+      }
+    }
+
     const { data, error } = await supabase.from('community_posts').insert([{
-      anon_id, category: '자유', content,
+      anon_id, category: '일반', title: title || null, content, image_url,
       like_count: 0, comment_count: 0, deleted: false
     }]).select().single();
     if (error) throw error;
