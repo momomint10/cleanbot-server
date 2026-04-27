@@ -715,7 +715,8 @@ app.get('/api/community/posts', async (req, res) => {
       .order('created_at', { ascending: false })
       .range(page*limit, (page*1+1)*limit-1);
     if (search && search.trim()) {
-      q = q.ilike('content', '%' + search.trim() + '%');
+      const kw = '%' + search.trim() + '%';
+      q = q.or('title.ilike.' + kw + ',content.ilike.' + kw);
     }
     const { data, error } = await q;
     if (error) throw error;
