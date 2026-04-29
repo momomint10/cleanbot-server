@@ -1124,6 +1124,141 @@ app.delete('/api/market/listings/:id', async (req, res) => {
 
 
 
+
+// ═══════════════════════════════════════════════════════════════
+//  중고거래 인앱 채팅 API  (개인정보 보호 - 전화번호 미노출)
+// ═══════════════════════════════════════════════════════════════
+
+// ── POST /api/market/chats  (채팅방 생성 또는 기존 반환) ────────
+app.post('/api/market/chats', async (req, res) => {
+  try {
+    const { listing_id, buyer_anon_id } = req.body;
+    if (!listing_id || !buyer_anon_id) return res.status(400).json({ error: '필수 항목 누락' });
+
+    // 기존 채팅방 조회
+    const { data: existing } = await supabase
+      .from('market_chats')
+      .select('*')
+      .eq('listing_id', listing_id)
+      .eq('buyer_anon_id', buyer_anon_id)
+      .single();
+
+    if (existing) return res.json({ success: true, data: existing, isNew: false });
+
+    // 판매자 조회
+    const { data: listing } = await supabase
+      .from('market_listings')
+      .select('anon_id, title')
+      .eq('id', listing_id)
+      .single();
+
+    if (!listing) return res.status(404).json({ error: '물품 없음' });
+    if (listing.anon_id === buyer_anon_id) return res.status(400).json({ error: '자신의 물품에는 채팅할 수 없습니다' });
+
+    const { data, error } = await supabase
+      .from('market_chats')
+      .insert([{ listing_id, buyer_anon_id, seller_anon_id: listing.anon_id }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, data, isNew: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/market/chats/:id/messages  (메시지 목록) ──────────
+app.get('/api/market/chats/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id, after } = req.query;
+    if (!anon_id) return res.status(400).json({ error: 'anon_id 필요' });
+
+    // 채팅방 접근 권한 확인
+    const { data: chat } = await supabase
+      .from('market_chats')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!chat) return res.status(404).json({ error: '채팅방 없음' });
+    if (chat.buyer_anon_id !== anon_id && chat.seller_anon_id !== anon_id) {
+      return res.status(403).json({ error: '접근 권한 없음' });
+    }
+
+    let q = supabase
+      .from('market_messages')
+      .select('*')
+      .eq('chat_id', id)
+      .order('created_at', { ascending: true })
+      .limit(100);
+
+    if (after) q = q.gt('created_at', after);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    // 읽음 처리
+    await supabase.from('market_chats')
+      .update(anon_id === chat.buyer_anon_id ? { buyer_unread: 0 } : { seller_unread: 0 })
+      .eq('id', id);
+
+    res.json({ success: true, data: data || [], chat });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/market/chats/:id/messages  (메시지 전송) ─────────
+app.post('/api/market/chats/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id, content } = req.body;
+    if (!anon_id || !content?.trim()) return res.status(400).json({ error: '필수 항목 누락' });
+    if (content.length > 500) return res.status(400).json({ error: '메시지 500자 이내' });
+
+    const { data: chat } = await supabase
+      .from('market_chats')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!chat) return res.status(404).json({ error: '채팅방 없음' });
+    if (chat.buyer_anon_id !== anon_id && chat.seller_anon_id !== anon_id) {
+      return res.status(403).json({ error: '접근 권한 없음' });
+    }
+
+    const { data, error } = await supabase
+      .from('market_messages')
+      .insert([{ chat_id: id, sender_anon_id: anon_id, content: content.trim() }])
+      .select()
+      .single();
+    if (error) throw error;
+
+    // 상대방 unread +1
+    const isBuyer = anon_id === chat.buyer_anon_id;
+    await supabase.from('market_chats').update(
+      isBuyer ? { seller_unread: (chat.seller_unread||0)+1, last_message: content.trim(), updated_at: new Date().toISOString() }
+              : { buyer_unread:  (chat.buyer_unread ||0)+1, last_message: content.trim(), updated_at: new Date().toISOString() }
+    ).eq('id', id);
+
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/market/chats/my  (내 채팅 목록) ───────────────────
+app.get('/api/market/chats/my', async (req, res) => {
+  try {
+    const { anon_id } = req.query;
+    if (!anon_id) return res.status(400).json({ error: 'anon_id 필요' });
+
+    const { data: asBuyer }  = await supabase.from('market_chats').select('*, market_listings(title,price,image_url)').eq('buyer_anon_id', anon_id).order('updated_at', { ascending: false });
+    const { data: asSeller } = await supabase.from('market_chats').select('*, market_listings(title,price,image_url)').eq('seller_anon_id', anon_id).order('updated_at', { ascending: false });
+
+    const all = [...(asBuyer||[]).map(c=>({...c,role:'buyer'})), ...(asSeller||[]).map(c=>({...c,role:'seller'}))];
+    all.sort((a,b) => new Date(b.updated_at||b.created_at) - new Date(a.updated_at||a.created_at));
+
+    res.json({ success: true, data: all });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.listen(PORT, () => {
   console.log(`ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ - ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ ${PORT}`);
   console.log(`ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ§ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ£ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¼ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¼`);
