@@ -1018,8 +1018,6 @@ app.post('/send-sms', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 //  중고거래 API  (수수료: 거래금액의 0.1%)
 // ═══════════════════════════════════════════════════════════════
-const MARKET_FEE_RATE = 0.001; // 0.1%
-
 // ── GET /api/market/listings ─────────────────────────────────
 app.get('/api/market/listings', async (req, res) => {
   try {
@@ -1124,42 +1122,7 @@ app.delete('/api/market/listings/:id', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── POST /api/market/transactions ────────────────────────────
-// 거래 완료 처리: 수수료 0.1% 자동 계산 기록
-app.post('/api/market/transactions', async (req, res) => {
-  try {
-    const { listing_id, buyer_anon_id, seller_anon_id, price } = req.body;
-    if (!listing_id || !buyer_anon_id || !price) return res.status(400).json({ error: '필수 항목 누락' });
 
-    const fee = Math.ceil(Number(price) * MARKET_FEE_RATE); // 0.1% 올림
-    const { data, error } = await supabase.from('market_transactions').insert([{
-      listing_id, buyer_anon_id, seller_anon_id,
-      price: Number(price), fee,
-      status: 'completed'
-    }]).select().single();
-    if (error) throw error;
-
-    // 상품 상태 → sold
-    await supabase.from('market_listings').update({ status: 'sold' }).eq('id', listing_id);
-
-    res.json({ success: true, data, fee, message: `거래 완료! 플랫폼 수수료: ${fee.toLocaleString()}원 (0.1%)` });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── GET /api/market/stats ─────────────────────────────────────
-// 관리자용: 총 수수료 수익 조회
-app.get('/api/market/stats', async (req, res) => {
-  try {
-    const adminKey = req.query.adminKey || req.headers['x-admin-key'];
-    if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '인증 실패' });
-    const { data } = await supabase.from('market_transactions')
-      .select('fee, price, created_at').eq('status', 'completed');
-    const totalFee   = (data||[]).reduce((s,r) => s + (r.fee||0), 0);
-    const totalVol   = (data||[]).reduce((s,r) => s + (r.price||0), 0);
-    const totalCount = (data||[]).length;
-    res.json({ success: true, totalFee, totalVolume: totalVol, totalCount, feeRate: '0.1%' });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
 
 app.listen(PORT, () => {
   console.log(`ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ - ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ ${PORT}`);
