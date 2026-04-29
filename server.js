@@ -1014,6 +1014,153 @@ app.post('/send-sms', async (req, res) => {
   }
 });
 
+
+// ═══════════════════════════════════════════════════════════════
+//  중고거래 API  (수수료: 거래금액의 0.1%)
+// ═══════════════════════════════════════════════════════════════
+const MARKET_FEE_RATE = 0.001; // 0.1%
+
+// ── GET /api/market/listings ─────────────────────────────────
+app.get('/api/market/listings', async (req, res) => {
+  try {
+    const { search, category, page = 0, limit = 20, seller_id } = req.query;
+    let q = supabase.from('market_listings')
+      .select('id,title,description,price,category,image_url,status,anon_id,contact,views,created_at')
+      .eq('status', seller_id ? supabase.or('status.eq.available,status.eq.reserved,status.eq.sold') : 'available')
+      .order('created_at', { ascending: false })
+      .range(Number(page)*Number(limit), (Number(page)+1)*Number(limit)-1);
+
+    if (seller_id) q = supabase.from('market_listings')
+      .select('id,title,description,price,category,image_url,status,anon_id,contact,views,created_at')
+      .eq('anon_id', seller_id)
+      .order('created_at', { ascending: false });
+
+    if (search && search.trim()) {
+      const kw = '%' + search.trim() + '%';
+      q = q.or('title.ilike.' + kw + ',description.ilike.' + kw);
+    }
+    if (category && category !== 'all') q = q.eq('category', category);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    const items = (data||[]).map(p => ({
+      ...p,
+      nickname: makeNickname(p.anon_id),
+      is_mine: false // 클라이언트에서 anon_id 비교
+    }));
+    res.json({ success: true, data: items });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/market/listings ────────────────────────────────
+app.post('/api/market/listings', async (req, res) => {
+  try {
+    const { anon_id, title, description, price, category, contact, imageBase64, imageMime } = req.body;
+    if (!anon_id || !title || !price) return res.status(400).json({ error: '필수 항목 누락 (anon_id, title, price)' });
+    if (title.length > 50) return res.status(400).json({ error: '제목 50자 이내' });
+    if (Number(price) < 100) return res.status(400).json({ error: '최소 거래금액: 100원' });
+
+    let image_url = null;
+    if (imageBase64) {
+      try {
+        const mime = imageMime || 'image/jpeg';
+        const ext  = mime.split('/')[1] || 'jpg';
+        const path = 'market/' + Date.now() + '_' + Math.random().toString(36).slice(2,7) + '.' + ext;
+        const buf  = Buffer.from(imageBase64, 'base64');
+        const { error: upErr } = await supabase.storage.from('ssak-contracts').upload(path, buf, { contentType: mime });
+        if (!upErr) image_url = supabase.storage.from('ssak-contracts').getPublicUrl(path).data.publicUrl;
+      } catch(e) { console.log('이미지 오류:', e.message); }
+    }
+
+    const { data, error } = await supabase.from('market_listings').insert([{
+      anon_id, title, description: description||'', price: Number(price),
+      category: category||'기타', contact: contact||'',
+      image_url, status: 'available', views: 0
+    }]).select().single();
+    if (error) throw error;
+    res.json({ success: true, data: { ...data, nickname: makeNickname(data.anon_id) } });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/market/listings/:id ─────────────────────────────
+app.get('/api/market/listings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // 조회수 +1
+    await supabase.from('market_listings').update({ views: supabase.rpc ? undefined : undefined })
+      .eq('id', id);
+    const { data, error } = await supabase.from('market_listings').select('*').eq('id', id).single();
+    if (error || !data) return res.status(404).json({ error: '게시글 없음' });
+    // views increment
+    await supabase.from('market_listings').update({ views: (data.views||0) + 1 }).eq('id', id);
+    res.json({ success: true, data: { ...data, nickname: makeNickname(data.anon_id) } });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PATCH /api/market/listings/:id/status ────────────────────
+app.patch('/api/market/listings/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id, status } = req.body; // available | reserved | sold
+    if (!['available','reserved','sold'].includes(status)) return res.status(400).json({ error: '잘못된 상태' });
+    const { data: existing } = await supabase.from('market_listings').select('anon_id').eq('id', id).single();
+    if (!existing || existing.anon_id !== anon_id) return res.status(403).json({ error: '권한 없음' });
+    const { data, error } = await supabase.from('market_listings').update({ status }).eq('id', id).select().single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/market/listings/:id ──────────────────────────
+app.delete('/api/market/listings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id } = req.body;
+    const { data: existing } = await supabase.from('market_listings').select('anon_id').eq('id', id).single();
+    if (!existing || existing.anon_id !== anon_id) return res.status(403).json({ error: '권한 없음' });
+    await supabase.from('market_listings').update({ status: 'deleted' }).eq('id', id);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/market/transactions ────────────────────────────
+// 거래 완료 처리: 수수료 0.1% 자동 계산 기록
+app.post('/api/market/transactions', async (req, res) => {
+  try {
+    const { listing_id, buyer_anon_id, seller_anon_id, price } = req.body;
+    if (!listing_id || !buyer_anon_id || !price) return res.status(400).json({ error: '필수 항목 누락' });
+
+    const fee = Math.ceil(Number(price) * MARKET_FEE_RATE); // 0.1% 올림
+    const { data, error } = await supabase.from('market_transactions').insert([{
+      listing_id, buyer_anon_id, seller_anon_id,
+      price: Number(price), fee,
+      status: 'completed'
+    }]).select().single();
+    if (error) throw error;
+
+    // 상품 상태 → sold
+    await supabase.from('market_listings').update({ status: 'sold' }).eq('id', listing_id);
+
+    res.json({ success: true, data, fee, message: `거래 완료! 플랫폼 수수료: ${fee.toLocaleString()}원 (0.1%)` });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/market/stats ─────────────────────────────────────
+// 관리자용: 총 수수료 수익 조회
+app.get('/api/market/stats', async (req, res) => {
+  try {
+    const adminKey = req.query.adminKey || req.headers['x-admin-key'];
+    if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '인증 실패' });
+    const { data } = await supabase.from('market_transactions')
+      .select('fee, price, created_at').eq('status', 'completed');
+    const totalFee   = (data||[]).reduce((s,r) => s + (r.fee||0), 0);
+    const totalVol   = (data||[]).reduce((s,r) => s + (r.price||0), 0);
+    const totalCount = (data||[]).length;
+    res.json({ success: true, totalFee, totalVolume: totalVol, totalCount, feeRate: '0.1%' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.listen(PORT, () => {
   console.log(`ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ - ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ ${PORT}`);
   console.log(`ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ§ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¹ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ£ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¼ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¸ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ­ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¼`);
