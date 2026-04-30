@@ -1,5 +1,33 @@
 const express = require('express');
 const cors = require('cors');
+
+// ── Web Push (VAPID) 설정 ─────────────────────────────────────
+const webpush = require('web-push');
+const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || 'BBKeVFJH8jMvhNW6dZYGstytLK6jVOzc2ZD8anIhdYU1wXgDFqIlXx0U2wtCy8RT_OUckXnpdaFWhBk5u57ysCg';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || 'ZBNvBTQceqq0pO9i8oW-0NN2FuxbDNjo-mXtEqFtnpg';
+webpush.setVapidDetails('mailto:ssak@ssakapp.co.kr', VAPID_PUBLIC, VAPID_PRIVATE);
+
+// 편의 함수: 구독자 전체에게 푸시 발송
+async function sendPushToAll(payload) {
+  try {
+    const { data: subs } = await supabase.from('push_subscriptions').select('*');
+    if (!subs || !subs.length) return;
+    const msg = JSON.stringify(payload);
+    await Promise.allSettled(
+      subs.map(sub =>
+        webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          msg
+        ).catch(async e => {
+          // 410 Gone → 구독 만료, 삭제
+          if (e.statusCode === 410) {
+            await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+          }
+        })
+      )
+    );
+  } catch(e) { console.log('Push 발송 오류:', e.message); }
+}
 const { createClient } = require('@supabase/supabase-js');
  
 const app = express();
@@ -427,6 +455,12 @@ const ownerPh2 = contract.owner_phone || contract.contract_data?.ownerPhone;
   } catch(smsErr2) { console.log('SMS done error:', smsErr2.message); }
 
   res.json({ success: true, pdfUrl });
+    // 업주에게 계약서 서명 완료 푸시 알림
+    sendPushToAll({
+      title: '✍️ 계약서 서명 완료!',
+      body: '고객 서명이 완료되어 계약서가 확정되었습니다',
+      icon: '/icon-192.png', url: '/schedule.html', tag: 'contract-signed'
+    });
   } catch (err) {
     console.error('ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ£ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¥ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ:', err);
     res.status(500).json({ error: 'ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¬ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¤ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ«ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¥ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ: ' + err.message });
@@ -476,6 +510,12 @@ app.post('/api/booking', async (req, res) => {
       }
     } catch(se) { console.log('SMS error:',se.message); }
     res.json({ success: true, data });
+    // 업주에게 신규 예약 푸시 알림
+    sendPushToAll({
+      title: '📋 신규 예약 신청!',
+      body: `${name}님 (${type||'청소'} · ${size||'?'}평) 예약 신청이 도착했습니다`,
+      icon: '/icon-192.png', url: '/schedule.html', tag: 'new-booking'
+    });
   } catch (err) {
     console.error('booking error:', err);
     res.status(500).json({ error: 'SERVER_ERROR: '+err.message, detail: String(err) });
@@ -1053,6 +1093,17 @@ app.post('/api/market/chats/:id/messages', async (req, res) => {
     ).eq('id', id);
 
     res.json({ success: true, data });
+
+    // 상대방에게 채팅 메시지 푸시 알림
+    const isFromBuyer = anon_id === chat.buyer_anon_id;
+    const roleTxt = isFromBuyer ? '구매자' : '판매자';
+    sendPushToAll({
+      title: `💬 중고거래 새 메시지`,
+      body: `${roleTxt}: ${content.trim().slice(0,50)}`,
+      icon: '/icon-192.png',
+      url: '/market.html',
+      tag: 'chat-' + id
+    });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1069,6 +1120,58 @@ app.get('/api/market/chats/my', async (req, res) => {
     all.sort((a,b) => new Date(b.updated_at||b.created_at) - new Date(a.updated_at||a.created_at));
 
     res.json({ success: true, data: all });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// ═══════════════════════════════════════════════════════════════
+//  Web Push API
+// ═══════════════════════════════════════════════════════════════
+
+// ── GET /api/push/vapid-key (클라이언트 공개키 전달) ────────────
+app.get('/api/push/vapid-key', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC });
+});
+
+// ── POST /api/push/subscribe (구독 등록/갱신) ──────────────────
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const { endpoint, p256dh, auth, deviceId } = req.body;
+    if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: '구독 정보 불완전' });
+
+    // upsert (endpoint 기준)
+    const { error } = await supabase.from('push_subscriptions').upsert([{
+      endpoint, p256dh, auth, device_id: deviceId || null,
+      updated_at: new Date().toISOString()
+    }], { onConflict: 'endpoint' });
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/push/subscribe (구독 해제) ─────────────────────
+app.delete('/api/push/subscribe', async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (!endpoint) return res.status(400).json({ error: 'endpoint 필요' });
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/push/test (테스트 발송, adminKey 필요) ────────────
+app.post('/api/push/test', async (req, res) => {
+  try {
+    const { adminKey } = req.body;
+    if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '인증 실패' });
+    await sendPushToAll({
+      title: '🧹 싹싹 알림 테스트',
+      body: '푸시 알림이 정상적으로 작동합니다!',
+      icon: '/icon-192.png',
+      url: '/index.html'
+    });
+    res.json({ success: true, message: '테스트 알림 발송 완료' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
