@@ -1331,7 +1331,12 @@ app.get('/api/jobs', async (req, res) => {
     if (region && region !== '전체') q = q.eq('region', region);
     const { data, error } = await q;
     if (error) throw error;
-    res.json({ success: true, data: data || [] });
+    // 각 공고별 지원자 수 추가
+    const withCounts = await Promise.all((data||[]).map(async job => {
+      const { count } = await supabase.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', job.id);
+      return { ...job, applicant_count: count||0 };
+    }));
+    res.json({ success: true, data: withCounts });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
