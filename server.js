@@ -1183,7 +1183,7 @@ app.get('/api/workers', async (req, res) => {
 // POST /api/workers
 app.post('/api/workers', async (req, res) => {
   try {
-    const { anon_id, nickname, regions, skills, experience, daily_rate, available_days, available_times, bio, avatar_emoji, photoBase64, photoMime } = req.body;
+    const { anon_id, nickname, regions, skills, experience, daily_rate, available_days, available_times, bio, avatar_emoji, contact, photoBase64, photoMime } = req.body;
     if (!anon_id || !nickname) return res.status(400).json({ error: '닉네임을 입력해주세요' });
     if (!regions || !regions.length) return res.status(400).json({ error: '활동 지역을 선택해주세요' });
     if (!skills  || !skills.length)  return res.status(400).json({ error: '보유 기술을 선택해주세요' });
@@ -1208,6 +1208,7 @@ app.post('/api/workers', async (req, res) => {
         .update({ nickname, regions, skills, experience: Number(experience)||0, daily_rate: Number(daily_rate)||0,
           available_days: available_days||[], available_times: available_times||[], bio: bio||'', avatar_emoji: avatar_emoji||'👤',
           ...(photo_url ? { photo_url } : {}),
+          ...(contact !== undefined ? { contact } : {}),
           updated_at: new Date().toISOString() })
         .eq('anon_id', anon_id).select().single();
       if (error) throw error;
@@ -1216,7 +1217,7 @@ app.post('/api/workers', async (req, res) => {
       const { data, error } = await supabase.from('worker_profiles')
         .insert([{ anon_id, nickname, regions, skills, experience: Number(experience)||0,
           daily_rate: Number(daily_rate)||0, available_days: available_days||[], available_times: available_times||[], bio: bio||'',
-          avatar_emoji: avatar_emoji||'👤', photo_url, status: 'active' }]).select().single();
+          avatar_emoji: avatar_emoji||'👤', photo_url, contact: contact||'', status: 'active' }]).select().single();
       if (error) throw error;
       result = data;
     }
@@ -1311,6 +1312,216 @@ app.post('/api/worker-chats/:id/messages', async (req, res) => {
       ...(isReq ? { worker_unread: (chat.worker_unread||0)+1 } : { requester_unread: (chat.requester_unread||0)+1 })
     }).eq('id', id);
     res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// ═══════════════════════════════════════════════════════════════
+//  채용정보 API  (job_posts / job_applications)
+// ═══════════════════════════════════════════════════════════════
+
+// GET /api/jobs  (목록)
+app.get('/api/jobs', async (req, res) => {
+  try {
+    const { region, status = 'open', page = 0, limit = 30 } = req.query;
+    let q = supabase.from('job_posts')
+      .select('*').eq('status', status)
+      .order('created_at', { ascending: false })
+      .range(Number(page)*Number(limit), (Number(page)+1)*Number(limit)-1);
+    if (region && region !== '전체') q = q.eq('region', region);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/jobs  (공고 등록)
+app.post('/api/jobs', async (req, res) => {
+  try {
+    const { anon_id, contact, title, region, work_date, headcount, daily_rate, skills, description } = req.body;
+    if (!anon_id || !title || !region || !work_date) return res.status(400).json({ error: '필수 항목 누락' });
+    const { data, error } = await supabase.from('job_posts').insert([{
+      anon_id, contact: contact||'', title, region, work_date, headcount: Number(headcount)||1,
+      daily_rate: Number(daily_rate)||0, skills: skills||[], description: description||'', status: 'open'
+    }]).select().single();
+    if (error) throw error;
+
+    // 자동 매칭: 해당 지역+기술 보유 구직자에게 푸시
+    try {
+      let mq = supabase.from('worker_profiles').select('id,nickname,anon_id').eq('status','active');
+      if (region && region !== '전체') mq = mq.cs('regions', [region]);
+      if (skills && skills.length) mq = mq.cs('skills', [skills[0]]);
+      const { data: matched } = await mq.limit(20);
+      if (matched && matched.length > 0) {
+        await sendPushToAll({
+          title: '💼 새 채용공고 매칭!',
+          body: `${region} · ${title} (${(Number(daily_rate)||0).toLocaleString()}원/일)`,
+          icon: '/icon-192.png', url: '/workforce.html', tag: 'job-match'
+        });
+      }
+    } catch(e2) { console.log('자동매칭 푸시 오류:', e2.message); }
+
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/jobs/:id
+app.get('/api/jobs/:id', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('job_posts').select('*').eq('id', req.params.id).single();
+    if (error || !data) return res.status(404).json({ error: '공고 없음' });
+    // 지원자 수
+    const { count } = await supabase.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', req.params.id);
+    res.json({ success: true, data: { ...data, applicant_count: count||0 } });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/jobs/:id/status  (마감/재오픈)
+app.patch('/api/jobs/:id/status', async (req, res) => {
+  try {
+    const { anon_id, status } = req.body;
+    if (!['open','closed'].includes(status)) return res.status(400).json({ error: '잘못된 상태' });
+    const { data: existing } = await supabase.from('job_posts').select('anon_id').eq('id', req.params.id).single();
+    if (!existing || existing.anon_id !== anon_id) return res.status(403).json({ error: '권한 없음' });
+    const { data, error } = await supabase.from('job_posts').update({ status }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/jobs/:id/apply  (구직자 지원)
+app.post('/api/jobs/:id/apply', async (req, res) => {
+  try {
+    const { anon_id, contact, message } = req.body;
+    if (!anon_id || !contact) return res.status(400).json({ error: '연락처를 입력해주세요' });
+
+    const { data: job } = await supabase.from('job_posts').select('*').eq('id', req.params.id).single();
+    if (!job) return res.status(404).json({ error: '공고 없음' });
+    if (job.anon_id === anon_id) return res.status(400).json({ error: '본인 공고에는 지원할 수 없습니다' });
+
+    // 중복 지원 확인
+    const { data: dup } = await supabase.from('job_applications')
+      .select('id').eq('job_id', req.params.id).eq('applicant_anon_id', anon_id).single();
+    if (dup) return res.status(400).json({ error: '이미 지원한 공고입니다' });
+
+    // 구직자 프로필 조회
+    const { data: wProfile } = await supabase.from('worker_profiles').select('nickname').eq('anon_id', anon_id).single();
+
+    const { data, error } = await supabase.from('job_applications').insert([{
+      job_id: req.params.id, applicant_anon_id: anon_id,
+      applicant_contact: contact, message: message||'',
+      worker_nickname: wProfile?.nickname || '구직자',
+      status: 'pending'
+    }]).select().single();
+    if (error) throw error;
+
+    // 채용자에게 지원 알림 푸시
+    await sendPushToAll({
+      title: '🙋 새 지원자 도착!',
+      body: `${wProfile?.nickname||'구직자'}님이 "${job.title}" 공고에 지원했습니다`,
+      icon: '/icon-192.png', url: '/workforce.html', tag: 'new-applicant'
+    });
+
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/jobs/:id/applications  (지원자 목록 - 채용자용)
+app.get('/api/jobs/:id/applications', async (req, res) => {
+  try {
+    const { anon_id } = req.query;
+    const { data: job } = await supabase.from('job_posts').select('anon_id').eq('id', req.params.id).single();
+    if (!job || job.anon_id !== anon_id) return res.status(403).json({ error: '권한 없음' });
+    const { data, error } = await supabase.from('job_applications').select('*')
+      .eq('job_id', req.params.id).order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/jobs/applications/:appId/match  (매칭 확정 → 연락처 공유 + 스케줄 추가)
+app.patch('/api/jobs/applications/:appId/match', async (req, res) => {
+  try {
+    const { anon_id } = req.body;
+    const { data: app } = await supabase.from('job_applications').select('*, job_posts(*)').eq('id', req.params.appId).single();
+    if (!app) return res.status(404).json({ error: '지원서 없음' });
+    const job = app.job_posts;
+    if (!job || job.anon_id !== anon_id) return res.status(403).json({ error: '권한 없음' });
+
+    // 매칭 확정
+    const { error } = await supabase.from('job_applications').update({ status: 'matched' }).eq('id', req.params.appId);
+    if (error) throw error;
+
+    // 양방향 연락처 공유용 matched_info 저장
+    await supabase.from('job_applications').update({
+      status: 'matched',
+      employer_contact: job.contact,  // 채용자→구직자 공유
+      matched_at: new Date().toISOString()
+    }).eq('id', req.params.appId);
+
+    // 스케줄 자동 추가 (bookings 테이블)
+    try {
+      await supabase.from('bookings').insert([{
+        name: app.worker_nickname||'매칭 인력',
+        phone: app.applicant_contact,
+        address: job.region,
+        type: '인력매칭',
+        size: 0,
+        date: job.work_date,
+        price: job.daily_rate,
+        note: `[자동추가] ${job.title} 매칭 · 공고ID: ${job.id}`,
+        status: 'confirmed',
+        source: 'job_match'
+      }]);
+    } catch(e2) { console.log('스케줄 추가 오류:', e2.message); }
+
+    // 구직자에게 매칭 완료 알림
+    await sendPushToAll({
+      title: '🎉 매칭 완료!',
+      body: `"${job.title}" 공고에 매칭됐습니다! 채용자 연락처: ${job.contact}`,
+      icon: '/icon-192.png', url: '/workforce.html', tag: 'matched'
+    });
+
+    res.json({
+      success: true,
+      message: '매칭이 완료됐습니다',
+      applicant_contact: app.applicant_contact,
+      employer_contact: job.contact,
+      work_date: job.work_date
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/jobs/my/applied  (내가 지원한 공고 목록)
+app.get('/api/jobs/my/applied', async (req, res) => {
+  try {
+    const { anon_id } = req.query;
+    if (!anon_id) return res.status(400).json({ error: 'anon_id 필요' });
+    const { data, error } = await supabase.from('job_applications')
+      .select('*, job_posts(title,region,work_date,daily_rate,status)')
+      .eq('applicant_anon_id', anon_id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/jobs/my/posted  (내가 등록한 공고 목록)
+app.get('/api/jobs/my/posted', async (req, res) => {
+  try {
+    const { anon_id } = req.query;
+    if (!anon_id) return res.status(400).json({ error: 'anon_id 필요' });
+    const { data, error } = await supabase.from('job_posts')
+      .select('*').eq('anon_id', anon_id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    // 각 공고별 지원자 수 추가
+    const withCounts = await Promise.all((data||[]).map(async job => {
+      const { count } = await supabase.from('job_applications')
+        .select('*', { count: 'exact', head: true }).eq('job_id', job.id);
+      return { ...job, applicant_count: count||0 };
+    }));
+    res.json({ success: true, data: withCounts });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
