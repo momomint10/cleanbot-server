@@ -1350,22 +1350,25 @@ app.post('/api/jobs', async (req, res) => {
       daily_rate: Number(daily_rate)||0, skills: skills||[], description: description||'', status: 'open'
     }]).select().single();
     if (error) throw error;
-
-    // 자동 매칭: 해당 지역+기술 보유 구직자에게 푸시
+    // 자동 매칭: 조건 맞는 구직자에게 알림
     try {
-      let mq = supabase.from('worker_profiles').select('id,nickname,anon_id').eq('status','active');
-      if (region && region !== '전체') mq = mq.cs('regions', [region]);
-      if (skills && skills.length) mq = mq.cs('skills', [skills[0]]);
-      const { data: matched } = await mq.limit(20);
-      if (matched && matched.length > 0) {
-        await sendPushToAll({
-          title: '💼 새 채용공고 매칭!',
-          body: `${region} · ${title} (${(Number(daily_rate)||0).toLocaleString()}원/일)`,
-          icon: '/icon-192.png', url: '/workforce.html', tag: 'job-match'
+      const { data: workers } = await supabase.from('worker_profiles').select('anon_id,regions,skills').eq('status','active');
+      if (workers) {
+        let matched = workers.filter(w => {
+          if (w.anon_id === anon_id) return false;
+          const rm = !region || region === '전체' || (w.regions||[]).includes(region);
+          const sm = !skills || !skills.length || (skills||[]).some(sk => (w.skills||[]).includes(sk));
+          return rm && sm;
         });
+        if (matched.length) {
+          await sendPushToAll({
+            title: '💼 맞춤 채용공고!',
+            body: `[${region}] ${title} - 일당 ${daily_rate ? Number(daily_rate).toLocaleString()+'원' : '협의'}`,
+            icon: '/icon-192.png', url: '/workforce.html', tag: 'new-job'
+          });
+        }
       }
-    } catch(e2) { console.log('자동매칭 푸시 오류:', e2.message); }
-
+    } catch(e2) { console.log('자동매칭 오류:', e2.message); }
     res.json({ success: true, data });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1452,47 +1455,36 @@ app.patch('/api/jobs/applications/:appId/match', async (req, res) => {
     if (!app) return res.status(404).json({ error: '지원서 없음' });
     const { data: job } = await supabase.from('job_posts').select('*').eq('id', app.job_id).single();
     if (!job || job.anon_id !== anon_id) return res.status(403).json({ error: '권한 없음' });
-
-    // 매칭 확정
-    const { error } = await supabase.from('job_applications').update({ status: 'matched' }).eq('id', req.params.appId);
-    if (error) throw error;
-
-    // 양방향 연락처 공유용 matched_info 저장
+    // 매칭 확정 + 연락처 쌍방 저장
     await supabase.from('job_applications').update({
-      status: 'matched',
-      employer_contact: job.contact,  // 채용자→구직자 공유
-      matched_at: new Date().toISOString()
+      status: 'matched', employer_contact: job.contact, matched_at: new Date().toISOString()
     }).eq('id', req.params.appId);
-
-    // 스케줄 자동 추가 (bookings 테이블)
+    // 스케줄 자동 추가
     try {
       await supabase.from('bookings').insert([{
-        name: app.worker_nickname||'매칭 인력',
+        name: app.worker_nickname || '매칭 인력',
         phone: app.applicant_contact,
         address: job.region,
         type: '인력매칭',
         size: 0,
         date: job.work_date,
-        price: job.daily_rate,
-        note: `[자동추가] ${job.title} 매칭 · 공고ID: ${job.id}`,
+        price: job.daily_rate || 0,
+        note: `[인력매칭] ${job.title} · 구직자: ${app.applicant_contact}`,
         status: 'confirmed',
         source: 'job_match'
       }]);
     } catch(e2) { console.log('스케줄 추가 오류:', e2.message); }
-
     // 구직자에게 매칭 완료 알림
     await sendPushToAll({
       title: '🎉 매칭 완료!',
-      body: `"${job.title}" 공고에 매칭됐습니다! 채용자 연락처: ${job.contact}`,
+      body: `[${job.title}] 매칭됐습니다. 채용자 연락처: ${job.contact}`,
       icon: '/icon-192.png', url: '/workforce.html', tag: 'matched'
     });
-
     res.json({
-      success: true,
-      message: '매칭이 완료됐습니다',
+      success: true, message: '매칭이 완료됐습니다',
       applicant_contact: app.applicant_contact,
       employer_contact: job.contact,
-      work_date: job.work_date
+      work_date: job.work_date, job_title: job.title
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
