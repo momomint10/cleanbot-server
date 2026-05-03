@@ -971,3 +971,155 @@ app.post('/api/market/chats/:id/messages', async (req, res) => {
     res.json({ success:true, data });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// 💬 커뮤니티 API
+// ═══════════════════════════════════════════════════════════════
+
+// 게시글 목록 (무한스크롤 + 검색 + 카테고리)
+app.get('/api/community/posts', async (req, res) => {
+  try {
+    const page  = parseInt(req.query.page)  || 0;
+    const limit = parseInt(req.query.limit) || 20;
+    const { search, category } = req.query;
+
+    let q = supabase.from('community_posts')
+      .select('*', { count: 'exact' })
+      .eq('deleted', false)
+      .order('created_at', { ascending: false })
+      .range(page * limit, (page + 1) * limit - 1);
+
+    if (category && category !== '전체') q = q.eq('category', category);
+    if (search) q = q.ilike('content', `%${search}%`);
+
+    const { data, error, count } = await q;
+    if (error) throw error;
+    res.json({ success: true, data: data || [], total: count || 0, hasMore: (page + 1) * limit < (count || 0) });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 게시글 단일 조회
+app.get('/api/community/posts/:id', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('community_posts')
+      .select('*').eq('id', req.params.id).single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 게시글 작성
+app.post('/api/community/posts', async (req, res) => {
+  try {
+    const { anon_id, title, content, category, imageBase64 } = req.body;
+    if (!anon_id || !content) return res.status(400).json({ error: '필수값 누락' });
+
+    let image_url = null;
+
+    // 이미지 업로드 (base64 → Supabase Storage)
+    if (imageBase64) {
+      try {
+        const buf = Buffer.from(imageBase64, 'base64');
+        const fname = `community/${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+        const { data: upData, error: upErr } = await supabase.storage
+          .from('ssak-contracts').upload(fname, buf, { contentType: 'image/jpeg', upsert: false });
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from('ssak-contracts').getPublicUrl(fname);
+          image_url = urlData.publicUrl;
+        }
+      } catch(imgErr) { console.warn('이미지 업로드 실패:', imgErr.message); }
+    }
+
+    const { data, error } = await supabase.from('community_posts')
+      .insert([{ anon_id, title: title || '', content, category: category || '일반', image_url }])
+      .select().single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 게시글 삭제 (soft delete)
+app.delete('/api/community/posts/:id', async (req, res) => {
+  try {
+    const { anon_id } = req.body;
+    const { error } = await supabase.from('community_posts')
+      .update({ deleted: true }).eq('id', req.params.id).eq('anon_id', anon_id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 좋아요 토글
+app.post('/api/community/posts/:id/like', async (req, res) => {
+  try {
+    const { anon_id } = req.body;
+    const postId = req.params.id;
+    if (!anon_id) return res.status(400).json({ error: 'anon_id 필요' });
+
+    // 이미 좋아요 눌렀는지 확인
+    const { data: existing } = await supabase.from('community_likes')
+      .select('id').eq('post_id', postId).eq('anon_id', anon_id).maybeSingle();
+
+    let liked;
+    if (existing) {
+      await supabase.from('community_likes').delete().eq('id', existing.id);
+      await supabase.from('community_posts').update({ like_count: supabase.rpc ? undefined : undefined }).eq('id', postId);
+      // like_count 감소
+      const { data: post } = await supabase.from('community_posts').select('like_count').eq('id', postId).single();
+      await supabase.from('community_posts').update({ like_count: Math.max(0, (post?.like_count || 1) - 1) }).eq('id', postId);
+      liked = false;
+    } else {
+      await supabase.from('community_likes').insert([{ post_id: postId, anon_id }]);
+      const { data: post } = await supabase.from('community_posts').select('like_count').eq('id', postId).single();
+      await supabase.from('community_posts').update({ like_count: (post?.like_count || 0) + 1 }).eq('id', postId);
+      liked = true;
+    }
+    res.json({ success: true, liked });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 댓글 목록
+app.get('/api/community/comments/:postId', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('community_comments')
+      .select('*').eq('post_id', req.params.postId).eq('deleted', false)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 댓글 작성
+app.post('/api/community/comments/:postId', async (req, res) => {
+  try {
+    const { anon_id, content } = req.body;
+    if (!anon_id || !content) return res.status(400).json({ error: '필수값 누락' });
+
+    const { data, error } = await supabase.from('community_comments')
+      .insert([{ post_id: req.params.postId, anon_id, content }]).select().single();
+    if (error) throw error;
+
+    // comment_count 증가
+    const { data: post } = await supabase.from('community_posts').select('comment_count').eq('id', req.params.postId).single();
+    await supabase.from('community_posts').update({ comment_count: (post?.comment_count || 0) + 1 }).eq('id', req.params.postId);
+
+    res.json({ success: true, data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 댓글 삭제
+app.delete('/api/community/comments/:id', async (req, res) => {
+  try {
+    const { anon_id, post_id } = req.body;
+    const { error } = await supabase.from('community_comments')
+      .update({ deleted: true }).eq('id', req.params.id).eq('anon_id', anon_id);
+    if (error) throw error;
+
+    // comment_count 감소
+    if (post_id) {
+      const { data: post } = await supabase.from('community_posts').select('comment_count').eq('id', post_id).single();
+      await supabase.from('community_posts').update({ comment_count: Math.max(0, (post?.comment_count || 1) - 1) }).eq('id', post_id);
+    }
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
