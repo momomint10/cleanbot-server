@@ -499,6 +499,110 @@ app.post('/api/contract/:token/sign', async (req, res) => {
   }
 });
 
+// ── 스케줄 (사장님 직접 관리) ──────────────────────────────────────────────
+// 본인 anon_id 기준 전체 조회 (옵션: status, from, to 날짜 필터)
+app.get('/api/schedules', async (req, res) => {
+  try {
+    const { anon_id, status, from, to } = req.query;
+    if (!anon_id) return res.status(400).json({ success: false, error: 'anon_id 필수' });
+
+    let query = supabase.from('schedules')
+      .select('*')
+      .eq('anon_id', anon_id)
+      .order('date', { ascending: true })
+      .order('time', { ascending: true });
+
+    if (status) query = query.eq('status', status);
+    if (from)   query = query.gte('date', from);
+    if (to)     query = query.lte('date', to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('schedules GET error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 신규 추가
+app.post('/api/schedules', async (req, res) => {
+  try {
+    const { anon_id, name, phone, date, time, addr, type, size, price, memo, status, source, source_id } = req.body;
+    if (!anon_id) return res.status(400).json({ success: false, error: 'anon_id 필수' });
+    if (!name || !phone) return res.status(400).json({ success: false, error: '이름과 연락처는 필수' });
+    if (!date) return res.status(400).json({ success: false, error: '날짜는 필수' });
+
+    const row = {
+      anon_id, name, phone,
+      date,
+      time:   time   || '',
+      addr:   addr   || '',
+      type:   type   || '입주 전 청소',
+      size:   size   || '',
+      price:  Number(price) || 0,
+      memo:   memo   || '',
+      status: status || 'confirmed',
+      source: source || 'manual',
+      source_id: source_id || null
+    };
+    const { data, error } = await supabase.from('schedules').insert([row]).select().single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('schedules POST error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 수정 (필드 부분 업데이트)
+app.put('/api/schedules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anon_id } = req.body;
+    if (!anon_id) return res.status(400).json({ success: false, error: 'anon_id 필수' });
+
+    const allowed = ['name','phone','date','time','addr','type','size','price','memo','status'];
+    const patch = {};
+    for (const k of allowed) {
+      if (req.body[k] !== undefined) patch[k] = (k === 'price') ? (Number(req.body[k]) || 0) : req.body[k];
+    }
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ success: false, error: '수정할 필드 없음' });
+    }
+
+    const { data, error } = await supabase.from('schedules')
+      .update(patch)
+      .eq('id', id)
+      .eq('anon_id', anon_id)   // 본인 데이터만 수정
+      .select().single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('schedules PUT error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 삭제
+app.delete('/api/schedules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const anon_id = req.query.anon_id || req.body.anon_id;
+    if (!anon_id) return res.status(400).json({ success: false, error: 'anon_id 필수' });
+
+    const { error } = await supabase.from('schedules')
+      .delete()
+      .eq('id', id)
+      .eq('anon_id', anon_id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('schedules DELETE error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── 예약 신청 접수 ─────────────────────────────────────────────────────────
 app.post('/api/booking', async (req, res) => {
   try {
