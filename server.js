@@ -1082,18 +1082,26 @@ app.delete('/api/push/subscribe', async (req, res) => {
 app.post('/api/booking', async (req, res) => {
   try {
     // ⚠️ 보안: 클라이언트 apiKey/apiSecret 무시 (환경변수 기반 sendSMSUtil 사용)
-    const { name, phone, addr, size, type, date, time, notes, ownerPhone } = req.body;
+    const { name, phone, size, type, date, time, notes, ownerPhone } = req.body || {};
+    // address ↔ addr 둘 다 호환 (booking.html은 address, 서버는 addr 사용해왔음)
+    const addrInput = req.body?.addr || req.body?.address || '';
+
+    console.log('booking POST:', { name, phone, hasAddr: !!addrInput, hasOwner: !!ownerPhone });
+
     if (!name || !phone) return res.status(400).json({ success: false, error: '이름과 연락처는 필수입니다.' });
 
     // 입력 길이 검증
     const cleanName = String(name).trim().slice(0, 30);
     const cleanPhone = String(phone).replace(/[^0-9]/g, '').slice(0, 15);
-    if (!cleanName || cleanPhone.length < 8) return res.status(400).json({ success: false, error: '이름/연락처가 올바르지 않습니다.' });
+    if (!cleanName || cleanPhone.length < 8) {
+      console.log('booking 검증 실패: name=', cleanName, 'phone=', cleanPhone);
+      return res.status(400).json({ success: false, error: '이름/연락처가 올바르지 않습니다.' });
+    }
 
     const bookingData = {
       name: cleanName,
       phone: cleanPhone,
-      addr: String(addr || '').slice(0, 200),
+      addr: String(addrInput).slice(0, 200),
       size: String(size || '').slice(0, 10),
       type: String(type || '입주 전 청소').slice(0, 30),
       date: String(date || '').slice(0, 20),
@@ -1104,22 +1112,34 @@ app.post('/api/booking', async (req, res) => {
     };
 
     const { data, error } = await supabase.from('bookings').insert([bookingData]).select().single();
-    if (error) throw error;
+    if (error) {
+      console.error('booking INSERT 실패:', error);
+      throw error;
+    }
+
+    console.log('booking INSERT 성공:', data.id);
 
     // 사장님에게 SMS 알림 (서버 환경변수 사용 — 클라이언트 키 노출 차단)
+    let smsResult = null;
     if (ownerPhone) {
       const cleanOwner = String(ownerPhone).replace(/[^0-9]/g, '');
       if (cleanOwner.length >= 8) {
         const msg = `[싹싹] 새 예약신청이 왔습니다!\n고객: ${cleanName} (${cleanPhone})\n날짜: ${bookingData.date} ${bookingData.time}\n유형: ${bookingData.type} ${bookingData.size}평\n주소: ${bookingData.addr}\n앱에서 확인하세요.`;
         try {
-          await sendSMSUtil(cleanOwner, msg, '[싹싹] 새 예약신청');
+          smsResult = await sendSMSUtil(cleanOwner, msg, '[싹싹] 새 예약신청');
+          console.log('booking SMS 결과:', smsResult);
         } catch(smsErr) {
           console.log('SMS 알림 실패(무시):', smsErr.message);
+          smsResult = { ok: false, error: smsErr.message };
         }
+      } else {
+        console.log('ownerPhone 형식 오류:', ownerPhone);
       }
+    } else {
+      console.log('ownerPhone 미전달');
     }
 
-    res.json({ success: true, data });
+    res.json({ success: true, data, sms: smsResult });
   } catch (err) {
     console.error('booking error:', err);
     res.status(500).json({ success: false, error: err.message });
