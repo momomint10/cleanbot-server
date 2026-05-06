@@ -1119,27 +1119,23 @@ app.post('/api/booking', async (req, res) => {
 
     console.log('booking INSERT 성공:', data.id);
 
-    // 사장님에게 SMS 알림 (서버 환경변수 사용 — 클라이언트 키 노출 차단)
-    let smsResult = null;
+    // ⚡ 즉시 응답 (사용자 화면 빠르게 다음 단계로)
+    res.json({ success: true, data });
+
+    // 사장님 SMS 알림은 fire-and-forget (응답 차단 안 함)
     if (ownerPhone) {
       const cleanOwner = String(ownerPhone).replace(/[^0-9]/g, '');
       if (cleanOwner.length >= 8) {
         const msg = `[싹싹] 새 예약신청이 왔습니다!\n고객: ${cleanName} (${cleanPhone})\n날짜: ${bookingData.date} ${bookingData.time}\n유형: ${bookingData.type} ${bookingData.size}평\n주소: ${bookingData.addr}\n앱에서 확인하세요.`;
-        try {
-          smsResult = await sendSMSUtil(cleanOwner, msg, '[싹싹] 새 예약신청');
-          console.log('booking SMS 결과:', smsResult);
-        } catch(smsErr) {
-          console.log('SMS 알림 실패(무시):', smsErr.message);
-          smsResult = { ok: false, error: smsErr.message };
-        }
+        sendSMSUtil(cleanOwner, msg, '[싹싹] 새 예약신청')
+          .then(r => console.log('booking SMS 결과:', r))
+          .catch(e => console.log('SMS 알림 실패(무시):', e.message));
       } else {
         console.log('ownerPhone 형식 오류:', ownerPhone);
       }
     } else {
       console.log('ownerPhone 미전달');
     }
-
-    res.json({ success: true, data, sms: smsResult });
   } catch (err) {
     console.error('booking error:', err);
     res.status(500).json({ success: false, error: err.message });
