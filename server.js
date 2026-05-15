@@ -530,15 +530,20 @@ app.post('/api/contract/create', async (req, res) => {
   const ownerSignature = body.owner_signature|| body.ownerSignature|| null;
   const adminKey       = body.admin_key      || '';
 
-  // 보안: admin_key 검증 (호환 모드)
-  // - adminKey 있으면 strict 검증 (스푸핑 차단)
-  // - adminKey 없으면 통과 (구버전 sign.html / cfg 미설정 호환)
-  if (adminKey && adminKey !== process.env.ADMIN_KEY) {
-    console.warn('contract/create: admin_key mismatch, blocking');
-    return res.status(401).json({ success: false, error: '인증 실패 — 설정의 ADMIN_KEY를 Railway 환경변수와 동일하게 입력해 주세요' });
+  // 보안: admin_key 검증 (strict 모드)
+  // 2026-05-16: 호환 모드 제거 — 인증 없는 contract/create 차단
+  // Railway 환경변수 ADMIN_KEY 와 클라이언트가 보낸 admin_key 가 일치해야 통과
+  if (!process.env.ADMIN_KEY) {
+    console.error('contract/create: FATAL Railway ADMIN_KEY env var not set');
+    return res.status(500).json({ success: false, error: '서버 설정 오류: ADMIN_KEY 환경변수 미설정 (Railway Variables에 추가 필요)' });
   }
   if (!adminKey) {
-    console.log('contract/create: admin_key missing (compatibility mode)');
+    console.warn('contract/create: blocked — admin_key missing');
+    return res.status(401).json({ success: false, error: 'ADMIN_KEY가 필요합니다. 싹싹 앱 설정 → ADMIN_KEY 항목에 Railway와 동일한 값을 입력해 주세요.' });
+  }
+  if (adminKey !== process.env.ADMIN_KEY) {
+    console.warn('contract/create: blocked — admin_key mismatch');
+    return res.status(401).json({ success: false, error: '인증 실패 — 설정의 ADMIN_KEY가 Railway 환경변수와 다릅니다.' });
   }
 
   if (!customerPhone) {
