@@ -453,6 +453,31 @@ app.post('/api/sms/send', async (req, res) => {
 
     if (response.ok) {
       console.log(`SMS 발송 완료: ${to} (${msgType})`);
+
+      // 발송이력 저장 (실패해도 응답 차단 안 함)
+      // 본문에서 type 추론: [Web발신] 다음 머리말로 분류
+      const inferType = (() => {
+        const m = msg.replace(/^\[Web발신\][\s\n]*/, '');
+        if (/계약서|서명/.test(m)) return 'contract';
+        if (/완료\s*보고서|시공\s*완료/.test(m)) return 'report';
+        if (/견적|예상\s*금액|금액\s*안내/.test(m)) return 'quote';
+        return 'general';
+      })();
+      const meta = req.body.meta || null;
+      const customerName = req.body.customer_name || req.body.customerName || null;
+      const sentBy = req.body.sent_by || req.headers['x-anon-id'] || null;
+      supabase.from('sms_history').insert({
+        type: inferType,
+        to_phone: to.replace(/-/g, ''),
+        customer_name: customerName,
+        subject: subject || null,
+        msg: msg,
+        meta: meta,
+        sent_by: sentBy
+      }).then(({ error: histErr }) => {
+        if (histErr) console.error('sms_history insert error:', histErr.message);
+      });
+
       res.json({ success: true, message: '발송 완료', type: msgType });
     } else {
       console.error('SMS 발송 실패:', data);
@@ -462,6 +487,27 @@ app.post('/api/sms/send', async (req, res) => {
   } catch (err) {
     console.error('SMS 발송 오류:', err);
     res.status(500).json({ success: false, error: '서버 오류가 발생했습니다' });
+  }
+});
+
+// ── 발송이력 조회 (origin 검증) ─────────────────────────────
+app.get('/api/sms-history', async (req, res) => {
+  const origin = req.headers.origin || req.headers.referer || '';
+  const allowedHosts = ['ssakapp.co.kr', 'localhost', '127.0.0.1'];
+  const isAllowed = origin && allowedHosts.some(h => origin.includes(h));
+  if (!isAllowed) return res.status(403).json({ success: false, error: '허용되지 않은 출처' });
+
+  try {
+    const { phone, type, limit } = req.query;
+    let q = supabase.from('sms_history').select('*').order('sent_at', { ascending: false });
+    if (phone) q = q.eq('to_phone', String(phone).replace(/-/g, ''));
+    if (type)  q = q.eq('type', type);
+    q = q.limit(Math.min(parseInt(limit) || 50, 200));
+    const { data, error } = await q;
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
