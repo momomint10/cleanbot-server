@@ -513,7 +513,7 @@ app.get('/api/sms-history', async (req, res) => {
 
 // ── SMS 발송 공통 함수 ───────────────────────────
 // subject 미설정 시 CoolSMS가 본문 첫 줄을 자동 추출 → [Web발신] 앞뒤 중복 원인
-async function sendSMSUtil(to, msg, subject) {
+async function sendSMSUtil(to, msg, subject, opts = {}) {
   const apiKey = process.env.COOLSMS_API_KEY;
   const apiSecret = process.env.COOLSMS_API_SECRET;
   const from = process.env.COOLSMS_FROM;
@@ -537,6 +537,21 @@ async function sendSMSUtil(to, msg, subject) {
     },
     body: JSON.stringify({ message: msgObj })
   });
+
+  // 발송 성공 시 sms_history 자동 저장 (opts.type/customerName/meta/sentBy 옵셔널)
+  if (response.ok) {
+    supabase.from('sms_history').insert({
+      type: opts.type || 'general',
+      to_phone: to.replace(/-/g, ''),
+      customer_name: opts.customerName || null,
+      subject: subject || null,
+      msg: msg,
+      meta: opts.meta || null,
+      sent_by: opts.sentBy || null
+    }).then(({ error: histErr }) => {
+      if (histErr) console.error('sms_history insert error (sendSMSUtil):', histErr.message);
+    });
+  }
   return response.ok ? { ok: true } : { ok: false, error: (await response.json()).errorMessage };
 }
 
@@ -574,11 +589,11 @@ app.post('/api/contract/upload', async (req, res) => {
     const ownerMsg = `📋 계약서 체결 완료\n고객: ${customerName}님 (${customerPhone})\n\n계약서 링크:\n${pdfUrl}`;
 
     // 고객 SMS 발송
-    await sendSMSUtil(customerPhone, customerMsg);
+    await sendSMSUtil(customerPhone, customerMsg, null, { type: 'contract', customerName });
 
     // 사장님 SMS 발송 (번호가 있고 고객과 다를 때)
     if (ownerPhone && ownerPhone.replace(/-/g,'') !== customerPhone.replace(/-/g,'')) {
-      await sendSMSUtil(ownerPhone, ownerMsg);
+      await sendSMSUtil(ownerPhone, ownerMsg, null, { type: 'contract', customerName });
     }
 
     console.log(`계약서 업로드 완료: ${filePath}`);
@@ -663,7 +678,11 @@ app.post('/api/contract/create', async (req, res) => {
     const signUrl = `https://ssakapp.co.kr/sign.html?token=${token}`;
     const msg = `[${companyName}] 계약서 서명 요청\n\n${customerName||'고객'}님, 아래 링크에서 계약서 내용을 확인하고 서명해 주세요.\n\n${signUrl}\n\n링크는 7일간 유효합니다.\n\n문의: ${companyPhone}`;
 
-    await sendSMSUtil(customerPhone.replace(/-/g,''), msg, `[${companyName}] 계약서 서명요청`);
+    await sendSMSUtil(customerPhone.replace(/-/g,''), msg, `[${companyName}] 계약서 서명요청`, {
+      type: 'contract',
+      customerName: customerName || null,
+      meta: { token, signUrl, stage: 'create' }
+    });
 
     console.log(`계약서 생성: ${token} / ${customerName} (${customerPhone})`);
     res.json({ success: true, token, signUrl });
@@ -729,8 +748,12 @@ app.post('/api/contract/:token/sign', async (req, res) => {
     const customerMsg = `[${companyName}] 계약서 서명 완료!\n${customerName}님의 서명이 완료되었습니다.${linkMsg}\n\n문의: ${companyPhone}`;
     const ownerMsg = `[계약서 서명 완료]\n고객: ${customerName}님 (${customerPhone})\n서명이 완료되었습니다.${linkMsg}`;
 
-    if (customerPhone) await sendSMSUtil(customerPhone.replace(/-/g,''), customerMsg, `[${companyName}] 서명 완료`);
-    if (companyPhone) await sendSMSUtil(companyPhone.replace(/-/g,''), ownerMsg, '계약서 서명 완료');
+    if (customerPhone) await sendSMSUtil(customerPhone.replace(/-/g,''), customerMsg, `[${companyName}] 서명 완료`, {
+      type: 'contract', customerName, meta: { token, stage: 'sign-complete', pdfUrl }
+    });
+    if (companyPhone) await sendSMSUtil(companyPhone.replace(/-/g,''), ownerMsg, '계약서 서명 완료', {
+      type: 'contract', customerName, meta: { token, stage: 'sign-complete', pdfUrl }
+    });
 
     // Web Push 알림 (사장님이 앱 켜두면 즉시 알림 — SMS 보조)
     // PUSH_ENABLED false면 자동 no-op. 실패해도 라우트 응답 차단 안 함.
@@ -1247,7 +1270,9 @@ app.post('/api/booking', async (req, res) => {
       const cleanOwner = String(ownerPhone).replace(/[^0-9]/g, '');
       if (cleanOwner.length >= 8) {
         const msg = `[싹싹] 새 예약신청이 왔습니다!\n고객: ${cleanName} (${cleanPhone})\n날짜: ${bookingData.date} ${bookingData.time}\n유형: ${bookingData.type} ${bookingData.size}평\n주소: ${bookingData.addr}\n앱에서 확인하세요.`;
-        sendSMSUtil(cleanOwner, msg, '[싹싹] 새 예약신청')
+        sendSMSUtil(cleanOwner, msg, '[싹싹] 새 예약신청', {
+          type: 'general', customerName: cleanName, meta: { stage: 'booking-alert', bookingId: data?.id }
+        })
           .then(r => console.log('booking SMS 결과:', r))
           .catch(e => console.log('SMS 알림 실패(무시):', e.message));
       } else {
@@ -1442,7 +1467,9 @@ async function _processReminders() {
           continue;
         }
         // 발송
-        const result = await sendSMSUtil(r.customer_phone, r.message, '[싹싹] 견적 안내');
+        const result = await sendSMSUtil(r.customer_phone, r.message, '[싹싹] 견적 안내', {
+          type: 'quote', customerName: r.customer_name || null, meta: { stage: 'followup-reminder', reminderId: r.id }
+        });
         await supabase.from('pending_reminders').update({
           status: result.ok ? 'sent' : 'cancelled',
           sent_at: now
