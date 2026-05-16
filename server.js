@@ -1782,6 +1782,266 @@ app.get('/api/booking/token/:token', async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════
+// 📋 견적 요청 (Quote Requests) — 사장님 → 고객 정보 수집 → 정밀 견적
+// 2026-05-17 사장님 결정: 러프 금액 미공개 → 고객 셀프 입력 → 정밀 견적
+// ════════════════════════════════════════════════════════════════
+
+// 1) POST /api/quote-requests — 사장님이 수집 폼 발송 (JWT 인증)
+app.post('/api/quote-requests', authRequired, async (req, res) => {
+  try {
+    const customerPhoneRaw = String(req.body.customer_phone || '').replace(/[^0-9]/g,'');
+    if (!/^01[016789]\d{7,8}$/.test(customerPhoneRaw)) {
+      return res.status(400).json({ success: false, error: '고객 휴대폰 번호를 확인해 주세요' });
+    }
+    const customerName = clampStr(req.body.customer_name || '', 30);
+    const customMsg    = clampStr(req.body.message || '', 300);
+    const companyName  = clampStr(req.body.company_name || '', 50);
+    // 토큰 생성 (32자 hex — 계약서 토큰과 동일 강도)
+    const token = require('crypto').randomBytes(16).toString('hex');
+    const { data: inserted, error: insErr } = await supabase.from('quote_requests').insert({
+      token,
+      customer_phone: customerPhoneRaw,
+      customer_name: customerName || null,
+      status: 'pending',
+      created_by: req.user.id
+    }).select('id, token, customer_phone, customer_name, status, created_at, expires_at').maybeSingle();
+    if (insErr) {
+      console.error('quote_requests insert error:', insErr.message);
+      return res.status(500).json({ success: false, error: '요청 생성 실패' });
+    }
+    // SMS 발송
+    const formUrl = `https://ssakapp.co.kr/quote.html?token=${token}`;
+    const defaultMsg = `안녕하세요${companyName ? ' ' + companyName : ''}입니다.\n정확한 견적을 위해 평수·사진을 알려주세요.\n${formUrl}\n(약 1분 소요)`;
+    const finalMsg = customMsg
+      ? customMsg.replace(/\{링크\}|\{url\}|\{URL\}/g, formUrl).replace(/\{이름\}/g, customerName || '고객님')
+      : defaultMsg;
+    let smsResult = { ok: false };
+    try {
+      smsResult = await sendSMSUtil(customerPhoneRaw, finalMsg, ' ', {
+        type: 'quote_request',
+        customerName,
+        meta: { quote_request_id: inserted.id, token }
+      });
+    } catch (smsErr) {
+      console.error('quote_requests SMS error:', smsErr.message);
+    }
+    res.json({
+      success: true,
+      data: inserted,
+      url: formUrl,
+      sms_sent: smsResult.ok || false,
+      sms_error: smsResult.ok ? null : (smsResult.error || null)
+    });
+  } catch (e) {
+    console.error('POST /api/quote-requests error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 2) GET /api/quote-requests/by-token/:token — 게스트 (고객 폼 페이지)
+app.get('/api/quote-requests/by-token/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!/^[a-f0-9]{32}$/.test(token)) return res.status(400).json({ success: false, error: '잘못된 링크' });
+    const { data, error } = await supabase.from('quote_requests')
+      .select('id, token, status, customer_phone, customer_name, clean_type, area_size, region, desired_date, notes, photos, final_quote_amount, expires_at, submitted_at, quoted_at')
+      .eq('token', token).maybeSingle();
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    if (!data)  return res.status(404).json({ success: false, error: '만료되었거나 존재하지 않는 링크입니다' });
+    if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
+      return res.status(410).json({ success: false, error: '만료된 링크입니다', code: 'EXPIRED' });
+    }
+    // 사장님 회사 정보 (선택 — 고객 화면 브랜딩)
+    const { data: owner } = await supabase.from('admin_users').select('name').eq('id', (await supabase.from('quote_requests').select('created_by').eq('token', token).maybeSingle()).data.created_by).maybeSingle();
+    res.json({ success: true, data, owner_name: owner ? owner.name : null });
+  } catch (e) {
+    console.error('GET /api/quote-requests/by-token error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 3) PUT /api/quote-requests/by-token/:token — 게스트 (고객 폼 제출)
+app.put('/api/quote-requests/by-token/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!/^[a-f0-9]{32}$/.test(token)) return res.status(400).json({ success: false, error: '잘못된 링크' });
+    const { data: row, error: getErr } = await supabase.from('quote_requests')
+      .select('id, status, expires_at, customer_phone, created_by').eq('token', token).maybeSingle();
+    if (getErr || !row) return res.status(404).json({ success: false, error: '존재하지 않는 링크입니다' });
+    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+      return res.status(410).json({ success: false, error: '만료된 링크입니다' });
+    }
+    if (row.status !== 'pending' && row.status !== 'submitted') {
+      return res.status(400).json({ success: false, error: '이미 견적이 발송된 요청입니다' });
+    }
+    // 입력 검증
+    const cleanTypes = ['입주청소','이사청소','거주청소'];
+    const cleanType = cleanTypes.includes(req.body.clean_type) ? req.body.clean_type : null;
+    const areaSize  = parseInt(req.body.area_size) || null;
+    if (areaSize !== null && (areaSize < 1 || areaSize > 999)) {
+      return res.status(400).json({ success: false, error: '평수는 1~999 사이' });
+    }
+    const region    = clampStr(req.body.region || '', 50);
+    const desiredDate = req.body.desired_date && /^\d{4}-\d{2}-\d{2}$/.test(req.body.desired_date) ? req.body.desired_date : null;
+    const notes     = clampStr(req.body.notes || '', 1000);
+    // 사진은 별도 라우트에서 업로드 — 여기서는 photos 배열만 갱신
+    const photos = Array.isArray(req.body.photos) ? req.body.photos.slice(0, 5) : undefined;
+
+    const patch = {
+      clean_type: cleanType,
+      area_size: areaSize,
+      region: region || null,
+      desired_date: desiredDate,
+      notes: notes || null,
+      status: 'submitted',
+      submitted_at: new Date().toISOString()
+    };
+    if (photos !== undefined) patch.photos = photos;
+
+    const { data, error } = await supabase.from('quote_requests')
+      .update(patch).eq('token', token)
+      .select('id, status, submitted_at').maybeSingle();
+    if (error) return res.status(500).json({ success: false, error: error.message });
+
+    // 사장님 Web Push 알림
+    sendPushToAll({
+      title: '🆕 새 견적 요청',
+      body: `${cleanType || '청소'} · ${areaSize ? areaSize + '평' : ''} 정보가 도착했어요`,
+      url: '/ssak-quote.html?tab=quote-requests',
+      tag: 'quote-request-' + row.id
+    }).catch(()=>null);
+
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('PUT /api/quote-requests error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 4) POST /api/quote-requests/by-token/:token/photos — 게스트 (사진 업로드)
+// body: { imageBase64: "...", imageMime: "image/jpeg" }
+app.post('/api/quote-requests/by-token/:token/photos', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!/^[a-f0-9]{32}$/.test(token)) return res.status(400).json({ success: false, error: '잘못된 링크' });
+    const { imageBase64, imageMime } = req.body || {};
+    if (!imageBase64 || !imageMime) return res.status(400).json({ success: false, error: '이미지 데이터 필수' });
+    if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(imageMime)) {
+      return res.status(400).json({ success: false, error: '지원되지 않는 형식' });
+    }
+    const { data: row, error: getErr } = await supabase.from('quote_requests')
+      .select('id, status, photos, expires_at').eq('token', token).maybeSingle();
+    if (getErr || !row) return res.status(404).json({ success: false, error: '존재하지 않는 링크' });
+    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+      return res.status(410).json({ success: false, error: '만료된 링크' });
+    }
+    const existing = Array.isArray(row.photos) ? row.photos : [];
+    if (existing.length >= 5) return res.status(400).json({ success: false, error: '사진은 최대 5장' });
+
+    // base64 → Buffer
+    const buf = Buffer.from(imageBase64, 'base64');
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: '이미지 10MB 이하' });
+    }
+    // 파일명: {token}/{nanoid}.ext
+    const ext = imageMime.split('/')[1].replace('jpeg','jpg');
+    const name = require('crypto').randomBytes(8).toString('hex') + '.' + ext;
+    const filePath = `${token}/${name}`;
+    const { data: up, error: upErr } = await supabase.storage
+      .from('quote-photos')
+      .upload(filePath, buf, { contentType: imageMime, upsert: false });
+    if (upErr) {
+      console.error('storage upload error:', upErr.message);
+      return res.status(500).json({ success: false, error: '업로드 실패' });
+    }
+    const { data: pub } = supabase.storage.from('quote-photos').getPublicUrl(filePath);
+    const url = pub && pub.publicUrl;
+    const newPhotos = [...existing, { url, path: filePath, sort_order: existing.length, uploaded_at: new Date().toISOString() }];
+    const { error: updErr } = await supabase.from('quote_requests')
+      .update({ photos: newPhotos }).eq('id', row.id);
+    if (updErr) return res.status(500).json({ success: false, error: updErr.message });
+    res.json({ success: true, url, count: newPhotos.length });
+  } catch (e) {
+    console.error('POST /api/quote-requests/photos error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 5) GET /api/quote-requests — 사장님 목록 (JWT 인증)
+app.get('/api/quote-requests', authRequired, async (req, res) => {
+  try {
+    const status = req.query.status && ['pending','submitted','quoted','contracted','cancelled'].includes(req.query.status) ? req.query.status : null;
+    let q = supabase.from('quote_requests')
+      .select('id, token, status, customer_phone, customer_name, clean_type, area_size, region, desired_date, notes, photos, final_quote_amount, created_at, submitted_at, quoted_at')
+      .order('created_at', { ascending: false }).limit(100);
+    if (status) q = q.eq('status', status);
+    // owner만 본인 것 + 다른 owner의 것도 (1인 운영 단순화)
+    const { data, error } = await q;
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    res.json({ success: true, data: data || [] });
+  } catch (e) {
+    console.error('GET /api/quote-requests error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 6) GET /api/quote-requests/:id — 사장님 상세 (JWT)
+app.get('/api/quote-requests/:id', authRequired, async (req, res) => {
+  const id = req.params.id;
+  if (!/^[a-f0-9-]{36}$/i.test(id)) return res.status(400).json({ success: false, error: '잘못된 id' });
+  const { data, error } = await supabase.from('quote_requests')
+    .select('*').eq('id', id).maybeSingle();
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  if (!data)  return res.status(404).json({ success: false, error: '없음' });
+  res.json({ success: true, data });
+});
+
+// 7) PATCH /api/quote-requests/:id — 사장님 정밀 견적 발송 (JWT)
+// body: { final_quote_amount, quote_message, action: 'quote'|'cancel' }
+app.patch('/api/quote-requests/:id', authRequired, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!/^[a-f0-9-]{36}$/i.test(id)) return res.status(400).json({ success: false, error: '잘못된 id' });
+    const action = req.body.action || 'quote';
+    const { data: row, error: getErr } = await supabase.from('quote_requests')
+      .select('id, status, customer_phone, customer_name').eq('id', id).maybeSingle();
+    if (getErr || !row) return res.status(404).json({ success: false, error: '없음' });
+    if (action === 'cancel') {
+      const { error } = await supabase.from('quote_requests')
+        .update({ status: 'cancelled' }).eq('id', id);
+      if (error) return res.status(500).json({ success: false, error: error.message });
+      return res.json({ success: true });
+    }
+    if (action !== 'quote') return res.status(400).json({ success: false, error: 'action invalid' });
+    const amount = parseInt(req.body.final_quote_amount);
+    const msg    = clampStr(req.body.quote_message || '', 1000);
+    if (!Number.isFinite(amount) || amount < 1 || amount > 99999999) {
+      return res.status(400).json({ success: false, error: '금액은 1~99,999,999원' });
+    }
+    if (!msg) return res.status(400).json({ success: false, error: '메시지 필수' });
+    if (row.status === 'cancelled') return res.status(400).json({ success: false, error: '취소된 요청' });
+    // 정밀 견적 SMS 발송
+    const sms = await sendSMSUtil(row.customer_phone, msg, ' ', {
+      type: 'quote',
+      customerName: row.customer_name || '',
+      meta: { quote_request_id: id, final_quote_amount: amount }
+    });
+    if (!sms.ok) return res.status(500).json({ success: false, error: 'SMS 발송 실패: ' + (sms.error || '') });
+    const { data, error } = await supabase.from('quote_requests').update({
+      final_quote_amount: amount,
+      quote_message: msg,
+      status: 'quoted',
+      quoted_at: new Date().toISOString()
+    }).eq('id', id).select('id, status, final_quote_amount, quoted_at').maybeSingle();
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('PATCH /api/quote-requests error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ──────────────────────────────────────────────────────────────
 // 📅 자동 Follow-up (Reminders)
 // 견적 발송 후 24시간 미응답 시 자동 리마인드 SMS 시스템
