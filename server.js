@@ -2301,6 +2301,18 @@ app.get('/api/_status', async (req, res) => {
   ];
   const envCheck = {};
   ENV_KEYS.forEach(k => { envCheck[k] = !!process.env[k] ? '✅ set' : '❌ missing'; });
+  // JWT_SECRET는 env 미설정이어도 DB에 저장되어 있으면 정상 — source 표시
+  const jwtSourceLabel = {
+    env: '✅ Railway env',
+    db: '✅ DB 영구',
+    generated: '✅ 신규 생성 후 DB 저장',
+    'db-race-recovered': '✅ DB (race recovered)',
+    'memory-fallback': '⚠️ 메모리 (DB 저장 실패)',
+    pending: '⏳ 부트스트랩 중'
+  }[JWT_SECRET_SOURCE] || JWT_SECRET_SOURCE;
+  if (!process.env.JWT_SECRET) {
+    envCheck['JWT_SECRET'] = jwtSourceLabel;
+  }
 
   // Railway 빌드 정보
   const buildInfo = {
